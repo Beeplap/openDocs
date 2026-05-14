@@ -227,7 +227,7 @@ export default function PdfMergePanel({
         >
           Merge PDFs
         </button>
-        <p className="mt-3 text-sm leading-6 text-slate-500">Use the order controls before exporting. The final PDF keeps each source document's original page size.</p>
+        <p className="mt-3 text-sm leading-6 text-slate-500">Use the order controls before exporting. The final PDF keeps each source document&apos;s original page size.</p>
       </aside>
     </section>
   );

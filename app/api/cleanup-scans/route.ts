@@ -5,6 +5,10 @@ const SUPABASE_SCAN_PAGES_TABLE = "scan_pages";
 
 export const dynamic = "force-dynamic";
 
+type ExpiredScanRow = {
+  storage_path: string | null;
+};
+
 export async function GET() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -38,7 +42,9 @@ export async function GET() {
   }
 
   const paths =
-    expiredRows?.map((r: any) => r.storage_path).filter((p: any) => typeof p === "string" && p.length > 0) ?? [];
+    (expiredRows as ExpiredScanRow[] | null | undefined)
+      ?.map((row) => row.storage_path)
+      .filter((path): path is string => typeof path === "string" && path.length > 0) ?? [];
 
   // 2) Remove storage objects (best-effort; if some are already missing, that's fine)
   if (paths.length > 0) {
@@ -57,4 +63,3 @@ export async function GET() {
     headers: { "content-type": "application/json" },
   });
 }
-

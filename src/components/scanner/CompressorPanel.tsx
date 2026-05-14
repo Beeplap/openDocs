@@ -30,7 +30,6 @@ function toDownloadName(file: File, outputType: string) {
 export default function CompressorPanel() {
   const [file, setFile] = React.useState<File | null>(null);
   const [targetKb, setTargetKb] = React.useState<number>(MIN_TARGET_KB);
-  const [estimatedBytes, setEstimatedBytes] = React.useState<number | null>(null);
   const [isCompressing, setIsCompressing] = React.useState(false);
   const [resultBytes, setResultBytes] = React.useState<number | null>(null);
   const [warning, setWarning] = React.useState<string | null>(null);
@@ -40,17 +39,7 @@ export default function CompressorPanel() {
   const originalBytes = file?.size ?? 0;
   const maxTargetKb = Math.max(MIN_TARGET_KB, Math.floor(originalBytes / 1024));
   const isPdf = file?.type === "application/pdf" || file?.name.toLowerCase().endsWith(".pdf");
-
-  React.useEffect(() => {
-    if (!file) {
-      setEstimatedBytes(null);
-      setResultBytes(null);
-      setWarning(null);
-      return;
-    }
-    const nextEstimated = Math.min(file.size, targetKb * 1024);
-    setEstimatedBytes(nextEstimated);
-  }, [file, targetKb]);
+  const estimatedBytes = file ? Math.min(file.size, targetKb * 1024) : null;
 
   React.useEffect(() => {
     return () => {

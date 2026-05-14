@@ -22,18 +22,21 @@ import { CSS } from "@dnd-kit/utilities";
 function SortableItem({ id }: { id: string }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
   const page = useDocumentStore((state) => state.pages.find((p) => p.id === id));
-  const [url, setUrl] = useState<string | null>(null);
   const removePage = useDocumentStore((s) => s.removePage);
+  const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!page) {
-      setUrl(null);
-      return;
-    }
+    const objectUrl = page ? URL.createObjectURL(page.originalBlob) : null;
+    let cancelled = false;
 
-    const objectUrl = URL.createObjectURL(page.originalBlob);
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
+    queueMicrotask(() => {
+      if (!cancelled) setUrl(objectUrl);
+    });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [page]);
 
   const style: React.CSSProperties = {
@@ -47,6 +50,8 @@ function SortableItem({ id }: { id: string }) {
     position: "relative",
     background: "#fafafa",
   };
+
+  if (!page) return null;
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>

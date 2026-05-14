@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type CropModalProps = {
   open: boolean;
@@ -92,6 +92,39 @@ type Handle =
 
 type CropBox = { x: number; y: number; w: number; h: number };
 
+function getDefaultCropBox(render: { renderW: number; renderH: number }, bounds: { minX: number; minY: number; maxX: number; maxY: number }) {
+  const A4_RATIO = 210 / 297;
+  const maxW = render.renderW * 0.92;
+  const maxH = render.renderH * 0.92;
+
+  let targetW = maxW;
+  let targetH = targetW / A4_RATIO;
+  if (targetH > maxH) {
+    targetH = maxH;
+    targetW = targetH * A4_RATIO;
+  }
+
+  return {
+    x: bounds.minX + (bounds.maxX - bounds.minX - targetW) / 2,
+    y: bounds.minY + (bounds.maxY - bounds.minY - targetH) / 2,
+    w: targetW,
+    h: targetH,
+  };
+}
+
+function clampCropBox(cropBox: CropBox, bounds: { minX: number; minY: number; maxX: number; maxY: number }) {
+  const MIN = 60;
+  const nextW = clamp(cropBox.w, MIN, bounds.maxX - bounds.minX);
+  const nextH = clamp(cropBox.h, MIN, bounds.maxY - bounds.minY);
+
+  return {
+    x: clamp(cropBox.x, bounds.minX, bounds.maxX - nextW),
+    y: clamp(cropBox.y, bounds.minY, bounds.maxY - nextH),
+    w: nextW,
+    h: nextH,
+  };
+}
+
 export default function CropModal({
   open,
   imageUrl,
@@ -100,12 +133,20 @@ export default function CropModal({
   onApply,
 }: CropModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [naturalState, setNaturalState] = useState<{ src: string; w: number; h: number } | null>(null);
   const [container, setContainer] = useState<{ w: number; h: number } | null>(null);
-  const [rotationDeg, setRotationDeg] = useState(0);
-  const [cropBox, setCropBox] = useState<CropBox | null>(null);
+  const [rotationState, setRotationState] = useState<{ src: string; degrees: number } | null>(null);
+  const [customCropBoxState, setCustomCropBoxState] = useState<{ src: string; box: CropBox } | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const [isApplying, setIsApplying] = useState(false);
+  const natural = useMemo(
+    () =>
+      imageUrl && naturalState?.src === imageUrl
+        ? { w: naturalState.w, h: naturalState.h }
+        : null,
+    [imageUrl, naturalState]
+  );
+  const rotationDeg = imageUrl && rotationState?.src === imageUrl ? rotationState.degrees : 0;
 
   const rotationBucket = useMemo(() => {
     const r = ((rotationDeg % 360) + 360) % 360;
@@ -137,16 +178,48 @@ export default function CropModal({
     };
   }, [render]);
 
+  const defaultCropBox = useMemo(() => {
+    if (!open || !render || !bounds || !natural) return null;
+    return getDefaultCropBox(render, bounds);
+  }, [open, render, bounds, natural]);
+
+  const customCropBox = imageUrl && customCropBoxState?.src === imageUrl ? customCropBoxState.box : null;
+  const cropBox = useMemo(() => {
+    const nextCropBox = customCropBox ?? defaultCropBox;
+    if (!nextCropBox || !bounds) return nextCropBox;
+    return clampCropBox(nextCropBox, bounds);
+  }, [bounds, customCropBox, defaultCropBox]);
+
+  const setCropBox = useCallback(
+    (nextBox: CropBox) => {
+      if (!imageUrl) return;
+      setCustomCropBoxState({ src: imageUrl, box: nextBox });
+    },
+    [imageUrl]
+  );
+
+  const updateRotationDeg = useCallback(
+    (update: number | ((current: number) => number)) => {
+      if (!imageUrl) return;
+      setRotationState((current) => {
+        const currentDegrees = current?.src === imageUrl ? current.degrees : 0;
+        return {
+          src: imageUrl,
+          degrees: typeof update === "function" ? update(currentDegrees) : update,
+        };
+      });
+      setCustomCropBoxState(null);
+    },
+    [imageUrl]
+  );
+
   // Load natural size when modal opens
   useEffect(() => {
     if (!open || !imageUrl) return;
-    setNatural(null);
-    setRotationDeg(0);
-    setCropBox(null);
 
     void (async () => {
       const img = await loadImage(imageUrl);
-      setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+      setNaturalState({ src: imageUrl, w: img.naturalWidth, h: img.naturalHeight });
     })().catch(() => {});
   }, [open, imageUrl]);
 
@@ -214,43 +287,6 @@ export default function CropModal({
     return () => ro.disconnect();
   }, [open]);
 
-  // Initialize crop box to an A4-sized rectangle (ratio only), but allow free resizing later.
-  useEffect(() => {
-    if (!open || !render || !bounds || !natural) return;
-    if (cropBox) return;
-
-    const A4_RATIO = 210 / 297;
-    const maxW = render.renderW * 0.92;
-    const maxH = render.renderH * 0.92;
-
-    let targetW = maxW;
-    let targetH = targetW / A4_RATIO;
-    if (targetH > maxH) {
-      targetH = maxH;
-      targetW = targetH * A4_RATIO;
-    }
-
-    const x = bounds.minX + (bounds.maxX - bounds.minX - targetW) / 2;
-    const y = bounds.minY + (bounds.maxY - bounds.minY - targetH) / 2;
-    setCropBox({ x, y, w: targetW, h: targetH });
-  }, [open, render, bounds, natural, cropBox]);
-
-  useEffect(() => {
-    if (!cropBox || !bounds) return;
-    const MIN = 60;
-
-    const nextW = clamp(cropBox.w, MIN, bounds.maxX - bounds.minX);
-    const nextH = clamp(cropBox.h, MIN, bounds.maxY - bounds.minY);
-
-    const nextX = clamp(cropBox.x, bounds.minX, bounds.maxX - nextW);
-    const nextY = clamp(cropBox.y, bounds.minY, bounds.maxY - nextH);
-
-    if (nextX !== cropBox.x || nextY !== cropBox.y || nextW !== cropBox.w || nextH !== cropBox.h) {
-      setCropBox({ x: nextX, y: nextY, w: nextW, h: nextH });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bounds]);
-
   const interactionRef = useRef<
     | null
     | {
@@ -293,7 +329,7 @@ export default function CropModal({
 
     const MIN = 60;
     const start = inter.startBox;
-    let next: CropBox = { ...start };
+    const next: CropBox = { ...start };
 
     if (inter.mode === "move") {
       next.x = start.x + dx;
@@ -487,14 +523,14 @@ export default function CropModal({
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setRotationDeg((d) => d - 90)}
+                    onClick={() => updateRotationDeg((d) => d - 90)}
                     className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     Rotate Left
                   </button>
                   <button
                     type="button"
-                    onClick={() => setRotationDeg((d) => d + 90)}
+                    onClick={() => updateRotationDeg((d) => d + 90)}
                     className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     Rotate Right
@@ -507,22 +543,8 @@ export default function CropModal({
                     onClick={() => {
                       // Reset to default A4 crop.
                       if (!bounds || !render) return;
-                      const A4_RATIO = 210 / 297;
-                      const maxW = render.renderW * 0.92;
-                      const maxH = render.renderH * 0.92;
-                      let targetW = maxW;
-                      let targetH = targetW / A4_RATIO;
-                      if (targetH > maxH) {
-                        targetH = maxH;
-                        targetW = targetH * A4_RATIO;
-                      }
-                      setCropBox({
-                        x: bounds.minX + (bounds.maxX - bounds.minX - targetW) / 2,
-                        y: bounds.minY + (bounds.maxY - bounds.minY - targetH) / 2,
-                        w: targetW,
-                        h: targetH,
-                      });
-                      setRotationDeg(0);
+                      setCropBox(getDefaultCropBox(render, bounds));
+                      updateRotationDeg(0);
                     }}
                     className="w-full rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-200"
                   >
@@ -560,4 +582,3 @@ export default function CropModal({
     </div>
   );
 }
-
