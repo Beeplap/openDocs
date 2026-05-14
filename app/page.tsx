@@ -143,12 +143,12 @@ export default function Home() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     try {
-      const existing = sessionStorage.getItem("freescanner_session_id");
+      const existing = sessionStorage.getItem("opendocs_session_id");
       if (existing) {
         sessionIdRef.current = existing;
       } else {
         const id = crypto.randomUUID();
-        sessionStorage.setItem("freescanner_session_id", id);
+        sessionStorage.setItem("opendocs_session_id", id);
         sessionIdRef.current = id;
       }
     } catch {
@@ -935,7 +935,7 @@ export default function Home() {
     const url = URL.createObjectURL(pdfBlob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = mergeMode === "twoUp" ? "freescanner-2up.pdf" : "freescanner-export.pdf";
+    anchor.download = mergeMode === "twoUp" ? "opendocs-2up.pdf" : "opendocs-export.pdf";
     anchor.click();
     URL.revokeObjectURL(url);
     setStatusMessage("PDF downloaded successfully.");
@@ -946,7 +946,7 @@ export default function Home() {
     <div className="min-h-screen px-4 py-4 text-slate-900 sm:px-6 lg:px-8">
       {!isClient ? (
         <div className="mx-auto max-w-7xl rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
-          Loading FreeScanner...
+          Loading OpenDocs...
         </div>
       ) : null}
       {isClient ? (
@@ -991,7 +991,7 @@ export default function Home() {
             <div className="flex flex-col gap-4 border-b border-slate-200 bg-white p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Document Workspace</p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">FreeScanner</h1>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">OpenDocs</h1>
                 <p className="mt-1 text-sm text-slate-500">Ready for the next document.</p>
               </div>
 

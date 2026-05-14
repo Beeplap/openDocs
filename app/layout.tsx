@@ -13,8 +13,8 @@ const display = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "FreeScanner",
-  description: "Responsive document scanner, camera capture, and collage creator.",
+  title: "OpenDocs",
+  description: "Open-source client-side PDF and document management — view, organize, merge, and edit documents entirely in your browser.",
 };
 
 export default function RootLayout({
