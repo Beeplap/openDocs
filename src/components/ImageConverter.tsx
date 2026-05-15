@@ -166,9 +166,8 @@ export default function ImageConverter() {
 
       const baseName = file.name.replace(/\.[^/.]+$/, "");
       result.outputs.forEach((output) => {
-        const pageSuffix = output.pageIndex ? `-page-${output.pageIndex}` : "";
-        const actionSuffix = isCompression ? "compressed" : "converted";
-        downloadBlob(output.blob, `${baseName}${pageSuffix}-${actionSuffix}.${extensionFromMime(output.outputFormat)}`);
+        const pageSuffix = result.outputs.length > 1 && output.pageIndex ? `-page-${output.pageIndex}` : "";
+        downloadBlob(output.blob, `${baseName}${pageSuffix}-opendocs.${extensionFromMime(output.outputFormat)}`);
       });
 
       setStatus(
