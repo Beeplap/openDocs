@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import dynamic from "next/dynamic";
 import { getPdfFirstPagePreview, getPdfPageCount, imagesToFullPageA4PDF, mergePdfFiles, pdfToImages } from "../src/utils/pdfUtils";
-import CropModal from "../src/components/CropModal";
 import ImageConverter from "../src/components/ImageConverter";
 import { supabase, SUPABASE_SCANS_BUCKET, SUPABASE_SCAN_PAGES_TABLE } from "../src/lib/supabaseClient";
 import ExportPanel from "../src/components/scanner/ExportPanel";
@@ -10,9 +10,11 @@ import PdfMergePanel from "../src/components/scanner/PdfMergePanel";
 import PdfEditorModal from "../src/components/scanner/PdfEditorModal";
 import ScanGrid from "../src/components/scanner/ScanGrid";
 import { A4_RATIO, defaultPageEdit } from "../src/components/scanner/types";
-import type { EditorBox, EditorFrame, ImageSize, MergeMode, PageEdit, PageFilter, PdfMergeItem, ScanItem, TransformHandle } from "../src/components/scanner/types";
+import type { CropPoint, EditorBox, EditorFrame, ImageSize, MergeMode, PageEdit, PageFilter, PdfMergeItem, ScanItem, TransformHandle } from "../src/components/scanner/types";
 
 type WorkspaceMode = "scan" | "pdf" | "convert";
+
+const CropModal = dynamic(() => import("../src/components/CropModal"), { ssr: false });
 
 export default function Home() {
   const [items, setItems] = useState<ScanItem[]>([]);
@@ -402,61 +404,6 @@ export default function Home() {
     }
   }
 
-  async function updateCroppedItemInSupabase(item: ScanItem, croppedBlob: Blob) {
-    const userId = supabaseUserIdRef.current;
-    const sessionId = sessionIdRef.current;
-    if (!isSupabaseConfigured || !supabaseReady || !userId || !sessionId) return null;
-    if (!item.storagePath) return null;
-
-    const ext = getExtFromBlobType(croppedBlob.type || "");
-    const newStoragePath = `${userId}/${sessionId}/${item.id}.${ext}`;
-    const expiresAt = Date.now() + SESSION_TTL_MS;
-
-    try {
-      const contentType = croppedBlob.type || "image/jpeg";
-      await supabase.storage.from(SUPABASE_SCANS_BUCKET).upload(newStoragePath, croppedBlob, {
-        contentType,
-        upsert: true,
-      });
-
-      const { error: updateError } = await supabase
-        .from(SUPABASE_SCAN_PAGES_TABLE)
-        .update({
-          storage_path: newStoragePath,
-          name: item.name,
-          kind: item.kind,
-          expires_at: new Date(expiresAt).toISOString(),
-        })
-        .eq("id", item.id)
-        .eq("user_id", userId)
-        .eq("session_id", sessionId);
-
-      // If the row doesn't exist for some reason, fall back to insert.
-      if (updateError) {
-        const { error: insertError } = await supabase.from(SUPABASE_SCAN_PAGES_TABLE).insert({
-          id: item.id,
-          user_id: userId,
-          session_id: sessionId,
-          storage_path: newStoragePath,
-          kind: item.kind,
-          name: item.name,
-          created_at: new Date().toISOString(),
-          expires_at: new Date(expiresAt).toISOString(),
-        });
-
-        if (insertError) throw insertError;
-      }
-
-      if (item.storagePath !== newStoragePath) {
-        await supabase.storage.from(SUPABASE_SCANS_BUCKET).remove([item.storagePath]);
-      }
-
-      return { storagePath: newStoragePath, expiresAt };
-    } catch {
-      return null;
-    }
-  }
-
   async function deleteItemFromSupabase(item: ScanItem) {
     const userId = supabaseUserIdRef.current;
     const sessionId = sessionIdRef.current;
@@ -729,6 +676,21 @@ export default function Home() {
     handlePdfDragEnd();
   }
 
+  function moveScanPage(id: string, direction: -1 | 1) {
+    setPdfOrderIds((current) => {
+      const from = current.indexOf(id);
+      if (from === -1) return current;
+      const to = from + direction;
+      if (to < 0 || to >= current.length) return current;
+
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setMergePreviewUrls([]);
+  }
+
   function startCropForOne(itemId: string) {
     setCropQueue([itemId]);
     setCropCursor(0);
@@ -743,34 +705,23 @@ export default function Home() {
     setStatusMessage("Crop cancelled.");
   }
 
-  async function handleCropApply(croppedBlob: Blob) {
+  async function handleCropApply(crop: NonNullable<PageEdit["documentCrop"]>) {
     if (!cropTargetId) return;
 
     const targetId = cropTargetId;
     const queueLen = cropQueue.length;
     const nextCursor = cropCursor + 1;
-    const newPreviewUrl = URL.createObjectURL(croppedBlob);
-
-    const targetItem = itemsRef.current.find((item) => item.id === targetId) ?? null;
 
     setItems((current) =>
       current.map((item) => {
         if (item.id !== targetId) return item;
-
-        // Treat the crop as the new "original" so subsequent crops revoke correctly.
-        if (item.previewUrl !== newPreviewUrl) URL.revokeObjectURL(item.previewUrl);
-        if (item.originalPreviewUrl !== newPreviewUrl) URL.revokeObjectURL(item.originalPreviewUrl);
-
         return {
           ...item,
-          file: croppedBlob,
-          originalFile: croppedBlob,
-          previewUrl: newPreviewUrl,
-          originalPreviewUrl: newPreviewUrl,
-          edit: { ...defaultPageEdit, crop: { ...defaultPageEdit.crop } },
+          edit: { ...item.edit, documentCrop: crop },
         };
       })
     );
+    setMergePreviewUrls([]);
 
     if (nextCursor >= queueLen) {
       setCropOpen(false);
@@ -780,19 +731,6 @@ export default function Home() {
     } else {
       setCropCursor(nextCursor);
       setStatusMessage(`Cropped ${nextCursor} of ${queueLen}.`);
-    }
-
-    // Persist cropped version to Supabase best-effort.
-    if (targetItem) {
-      void updateCroppedItemInSupabase(targetItem, croppedBlob).then((updated) => {
-        if (!updated) return;
-        setItems((current) =>
-          current.map((item) => {
-            if (item.id !== targetId) return item;
-            return { ...item, storagePath: updated.storagePath, expiresAt: updated.expiresAt };
-          })
-        );
-      });
     }
   }
 
@@ -854,6 +792,18 @@ export default function Home() {
 
   function resetPageEdit(id: string) {
     updatePageEdit(id, { ...defaultPageEdit, crop: { ...defaultPageEdit.crop } });
+  }
+
+  function swapPdfEditorSlots() {
+    if (pdfEditorPageIndex === null || mergeMode !== "twoUp") return;
+    const firstIndex = pdfEditorPageIndex * 2;
+    setPdfOrderIds((current) => {
+      if (!current[firstIndex] || !current[firstIndex + 1]) return current;
+      const next = [...current];
+      [next[firstIndex], next[firstIndex + 1]] = [next[firstIndex + 1], next[firstIndex]];
+      return next;
+    });
+    setMergePreviewUrls([]);
   }
 
   function getEditorPointer(e: React.PointerEvent) {
@@ -1131,6 +1081,7 @@ export default function Home() {
                 onReorderHandlePointerDown={onReorderHandlePointerDown}
                 onReorderHandlePointerMove={onReorderHandlePointerMove}
                 onReorderHandlePointerEnd={onReorderHandlePointerEnd}
+                moveScanPage={moveScanPage}
                 startCropForOne={startCropForOne}
                 removeItem={removeItem}
                 onAddScans={(files) => {
@@ -1187,6 +1138,7 @@ export default function Home() {
       <CropModal
         open={cropOpen}
         imageUrl={cropTarget?.previewUrl ?? null}
+        initialCrop={cropTarget?.edit.documentCrop ?? null}
         title={cropTarget ? `Crop: ${cropTarget.name}` : "Crop selected image"}
         onCancel={cancelCrop}
         onApply={handleCropApply}
@@ -1205,6 +1157,8 @@ export default function Home() {
         pdfEditorActiveItem={pdfEditorActiveItem}
         closePdfPageEditor={closePdfPageEditor}
         setPdfEditorActiveId={setPdfEditorActiveId}
+        startCropForOne={startCropForOne}
+        swapPdfEditorSlots={swapPdfEditorSlots}
         resetPageEdit={resetPageEdit}
         updatePageEdit={updatePageEdit}
         beginTransform={beginTransform}
@@ -1306,6 +1260,18 @@ function getEditorFrame(mergeMode: "single" | "twoUp", slotIndex: number): Edito
   };
 }
 
+function getDocumentCropSize(points: [CropPoint, CropPoint, CropPoint, CropPoint], imageSize: ImageSize): ImageSize {
+  const [tl, tr, br, bl] = points;
+  const top = Math.hypot((tr.x - tl.x) * imageSize.w, (tr.y - tl.y) * imageSize.h);
+  const bottom = Math.hypot((br.x - bl.x) * imageSize.w, (br.y - bl.y) * imageSize.h);
+  const left = Math.hypot((bl.x - tl.x) * imageSize.w, (bl.y - tl.y) * imageSize.h);
+  const right = Math.hypot((br.x - tr.x) * imageSize.w, (br.y - tr.y) * imageSize.h);
+  return {
+    w: Math.max(1, (top + bottom) / 2),
+    h: Math.max(1, (left + right) / 2),
+  };
+}
+
 function getEditorBox(
   item: ScanItem,
   imageSize: ImageSize,
@@ -1318,8 +1284,9 @@ function getEditorBox(
   const cropTop = clamp(crop.top, 0, 0.48);
   const cropRight = clamp(crop.right, 0, 0.48);
   const cropBottom = clamp(crop.bottom, 0, 0.48);
-  const sourceW = Math.max(1, imageSize.w * (1 - cropLeft - cropRight));
-  const sourceH = Math.max(1, imageSize.h * (1 - cropTop - cropBottom));
+  const documentCropSize = item.edit.documentCrop ? getDocumentCropSize(item.edit.documentCrop.points, imageSize) : null;
+  const sourceW = documentCropSize?.w ?? Math.max(1, imageSize.w * (1 - cropLeft - cropRight));
+  const sourceH = documentCropSize?.h ?? Math.max(1, imageSize.h * (1 - cropTop - cropBottom));
   const pageHeightForWidthOne = 1 / A4_RATIO;
   const sourceRatio = sourceW / sourceH;
   const frameRatio = frame.w / (frame.h * pageHeightForWidthOne);
@@ -1358,14 +1325,21 @@ async function drawEditedItem(
   frame: { x: number; y: number; w: number; h: number }
 ) {
   const image = await loadImage(item.previewUrl);
+  const cropLongEdge = Math.max(720, Math.min(1800, Math.ceil(Math.max(frame.w, frame.h) * 1.5)));
+  const croppedCanvas = item.edit.documentCrop
+    ? await import("../src/utils/documentCrop").then((mod) =>
+        mod.cropImageWithDocumentCrop(image, item.edit.documentCrop!, cropLongEdge)
+      )
+    : null;
+  const sourceImage = croppedCanvas ?? image;
   const crop = item.edit.crop;
-  const cropLeft = clamp(crop.left, 0, 0.48);
-  const cropTop = clamp(crop.top, 0, 0.48);
-  const cropRight = clamp(crop.right, 0, 0.48);
-  const cropBottom = clamp(crop.bottom, 0, 0.48);
+  const cropLeft = croppedCanvas ? 0 : clamp(crop.left, 0, 0.48);
+  const cropTop = croppedCanvas ? 0 : clamp(crop.top, 0, 0.48);
+  const cropRight = croppedCanvas ? 0 : clamp(crop.right, 0, 0.48);
+  const cropBottom = croppedCanvas ? 0 : clamp(crop.bottom, 0, 0.48);
 
-  const naturalW = image.naturalWidth || image.width;
-  const naturalH = image.naturalHeight || image.height;
+  const naturalW = croppedCanvas ? croppedCanvas.width : image.naturalWidth || image.width;
+  const naturalH = croppedCanvas ? croppedCanvas.height : image.naturalHeight || image.height;
   const sx = naturalW * cropLeft;
   const sy = naturalH * cropTop;
   const sw = Math.max(1, naturalW * (1 - cropLeft - cropRight));
@@ -1384,9 +1358,10 @@ async function drawEditedItem(
   ctx.translate(centerX, centerY);
   ctx.rotate((item.edit.rotation * Math.PI) / 180);
   ctx.filter = getCanvasFilter(item.edit.filter);
-  ctx.drawImage(image, sx, sy, sw, sh, -drawW / 2, -drawH / 2, drawW, drawH);
+  ctx.drawImage(sourceImage, sx, sy, sw, sh, -drawW / 2, -drawH / 2, drawW, drawH);
   ctx.restore();
   ctx.filter = "none";
+  croppedCanvas?.remove();
 
   if (item.edit.filter === "bw" || item.edit.filter === "enhanced") {
     applyScannerThreshold(ctx, frame, item.edit.filter);

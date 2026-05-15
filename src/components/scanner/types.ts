@@ -1,12 +1,17 @@
 "use client";
 
 export type PageFilter = "none" | "grayscale" | "bw" | "enhanced";
+export type CropPoint = { x: number; y: number };
+export type DocumentCrop = {
+  points: [CropPoint, CropPoint, CropPoint, CropPoint];
+};
 
 export type PageEdit = {
   offsetX: number;
   offsetY: number;
   zoom: number;
   rotation: number;
+  documentCrop: DocumentCrop | null;
   crop: {
     top: number;
     right: number;
@@ -55,6 +60,7 @@ export const defaultPageEdit: PageEdit = {
   offsetY: 0,
   zoom: 1,
   rotation: 0,
+  documentCrop: null,
   crop: { top: 0, right: 0, bottom: 0, left: 0 },
   filter: "none",
 };

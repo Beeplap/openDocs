@@ -14,6 +14,7 @@ type Props = {
   onReorderHandlePointerDown: (id: string, e: React.PointerEvent<HTMLElement>) => void;
   onReorderHandlePointerMove: (e: React.PointerEvent<HTMLElement>) => void;
   onReorderHandlePointerEnd: (e: React.PointerEvent<HTMLElement>) => void;
+  moveScanPage: (id: string, direction: -1 | 1) => void;
   startCropForOne: (id: string) => void;
   removeItem: (id: string) => void;
   onAddScans: (files?: FileList | null) => void;
@@ -31,6 +32,7 @@ export default function ScanGrid({
   onReorderHandlePointerDown,
   onReorderHandlePointerMove,
   onReorderHandlePointerEnd,
+  moveScanPage,
   startCropForOne,
   removeItem,
   onAddScans,
@@ -235,7 +237,23 @@ export default function ScanGrid({
                       {item.kind === "camera" ? "Camera Scan" : item.kind === "pdf-page" ? "PDF Page" : "Imported Image"}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-[1fr_1fr_40px_40px] gap-2">
+                    <button
+                      type="button"
+                      onClick={() => moveScanPage(item.id, -1)}
+                      disabled={!selected || pdfIndex <= 0}
+                      className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveScanPage(item.id, 1)}
+                      disabled={!selected || pdfIndex === pdfOrderIds.length - 1}
+                      className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Down
+                    </button>
                     <button
                       type="button"
                       onClick={() => startCropForOne(item.id)}
