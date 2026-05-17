@@ -11,8 +11,9 @@ import PdfEditorModal from "../src/components/scanner/PdfEditorModal";
 import ScanGrid from "../src/components/scanner/ScanGrid";
 import { A4_RATIO, defaultPageEdit } from "../src/components/scanner/types";
 import type { CropPoint, EditorBox, EditorFrame, ImageSize, MergeMode, PageEdit, PageFilter, PdfMergeItem, ScanItem, TransformHandle } from "../src/components/scanner/types";
+import AdvancedPdfEditor from "../src/components/scanner/AdvancedPdfEditor";
 
-type WorkspaceMode = "scan" | "pdf" | "convert";
+type WorkspaceMode = "scan" | "pdf" | "convert" | "advanced";
 
 const CropModal = dynamic(() => import("../src/components/CropModal"), { ssr: false });
 
@@ -954,7 +955,7 @@ export default function Home() {
                   ☰ Menu
                 </button>
 
-                <div className="hidden grid-cols-3 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:inline-grid">
+                <div className="hidden grid-cols-4 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:inline-grid">
                   <button
                     type="button"
                     onClick={() => {
@@ -990,6 +991,18 @@ export default function Home() {
                     }`}
                   >
                     Convert
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceMode("advanced");
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                      workspaceMode === "advanced" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"
+                    }`}
+                  >
+                    PDF Editor
                   </button>
                 </div>
 
@@ -1031,6 +1044,18 @@ export default function Home() {
                     >
                       Convert
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkspaceMode("advanced");
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                        workspaceMode === "advanced" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"
+                      }`}
+                    >
+                      PDF Editor
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -1042,14 +1067,18 @@ export default function Home() {
                     ? "Scan workspace"
                     : workspaceMode === "pdf"
                       ? "PDF merge workspace"
-                      : "Conversion workspace"}
+                      : workspaceMode === "advanced"
+                        ? "Advanced PDF editor"
+                        : "Conversion workspace"}
                 </p>
                 <p className="mt-1 text-slate-500">
                   {workspaceMode === "scan"
                     ? `${items.length} pages loaded`
                     : workspaceMode === "pdf"
                       ? `${pdfFiles.length} PDFs loaded`
-                      : "Client-side compression and conversion ready"}
+                      : workspaceMode === "advanced"
+                        ? "Edit, annotate, sign & export PDFs"
+                        : "Client-side compression and conversion ready"}
                 </p>
               </div>
               <div>
@@ -1059,7 +1088,9 @@ export default function Home() {
                     ? `${pdfOrderIds.length} pages in PDF`
                     : workspaceMode === "pdf"
                       ? `${pdfFiles.length} files in order`
-                      : "Single file optimize"}
+                      : workspaceMode === "advanced"
+                        ? "Text, highlight, signature"
+                        : "Single file optimize"}
                 </p>
               </div>
               <div>
@@ -1129,6 +1160,8 @@ export default function Home() {
               onMovePdf={movePdfFile}
               onReorderPdf={reorderPdfFile}
             />
+          ) : workspaceMode === "advanced" ? (
+            <AdvancedPdfEditor onStatusMessage={setStatusMessage} />
           ) : (
             <ImageConverter />
           )}

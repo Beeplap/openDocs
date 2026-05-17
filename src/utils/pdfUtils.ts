@@ -188,3 +188,73 @@ export async function pdfToImages(file: File): Promise<Blob[]> {
   }
   return result;
 }
+
+export async function renderPdfPageToCanvas(
+  file: File,
+  pageIndex: number,
+  scale = 1.5
+): Promise<HTMLCanvasElement> {
+  ensurePdfWorker();
+  const arrayBuffer = await file.arrayBuffer();
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(arrayBuffer),
+    isOffscreenCanvasSupported: false,
+  });
+  const pdf = await loadingTask.promise;
+  try {
+    const page = await pdf.getPage(pageIndex + 1);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return canvas;
+  } finally {
+    await pdf.destroy?.();
+  }
+}
+
+export async function renderPdfAllPagesToCanvases(
+  file: File,
+  scale = 1.5
+): Promise<HTMLCanvasElement[]> {
+  ensurePdfWorker();
+  const arrayBuffer = await file.arrayBuffer();
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(arrayBuffer),
+    isOffscreenCanvasSupported: false,
+  });
+  const pdf = await loadingTask.promise;
+  const canvases: HTMLCanvasElement[] = [];
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      canvases.push(canvas);
+    }
+  } finally {
+    await pdf.destroy?.();
+  }
+  return canvases;
+}
+
+export async function buildAnnotatedPdf(pageCanvases: HTMLCanvasElement[]): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const A4_WIDTH = 595.28;
+  const A4_HEIGHT = 841.89;
+  for (const canvas of pageCanvases) {
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    const base64 = dataUrl.split(",")[1];
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const embedded = await pdfDoc.embedJpg(bytes);
+    const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+    page.drawImage(embedded, { x: 0, y: 0, width: A4_WIDTH, height: A4_HEIGHT });
+  }
+  return pdfDoc.save();
+}
