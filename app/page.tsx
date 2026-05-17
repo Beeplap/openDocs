@@ -17,6 +17,12 @@ type WorkspaceMode = "scan" | "pdf" | "convert" | "advanced";
 
 const CropModal = dynamic(() => import("../src/components/CropModal"), { ssr: false });
 
+function generateId() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).substring(2, 15);
+}
+
 export default function Home() {
   const [items, setItems] = useState<ScanItem[]>([]);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("scan");
@@ -149,13 +155,13 @@ export default function Home() {
       if (existing) {
         sessionIdRef.current = existing;
       } else {
-        const id = crypto.randomUUID();
+        const id = generateId();
         sessionStorage.setItem("opendocs_session_id", id);
         sessionIdRef.current = id;
       }
     } catch {
       // sessionStorage may be blocked in some environments; fall back to a ref-only id.
-      sessionIdRef.current = crypto.randomUUID();
+      sessionIdRef.current = generateId();
     }
 
     (async () => {
@@ -435,7 +441,7 @@ export default function Home() {
     if (blobs.length === 0) return;
 
     const nextItems: ScanItem[] = blobs.map(({ blob, name, kind }) => ({
-      id: crypto.randomUUID(),
+      id: generateId(),
       name,
       kind,
       file: blob,
@@ -531,7 +537,7 @@ export default function Home() {
           ]);
 
           return {
-            id: crypto.randomUUID(),
+            id: generateId(),
             file,
             name: file.name,
             size: file.size,

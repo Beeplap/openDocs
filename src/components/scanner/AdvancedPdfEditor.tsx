@@ -92,7 +92,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     try {
       const canvases = await renderPdfAllPagesToCanvases(f, 2);
       const pagesData: PageData[] = canvases.map((c) => ({
-        id: crypto.randomUUID(),
+        id: generateId(),
         dataUrl: c.toDataURL("image/png"),
         width: c.width, height: c.height, rotation: 0,
       }));
@@ -158,7 +158,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       return;
     }
     const newAnns: AdvancedAnnotation[] = pages.map((_, i) => ({
-      kind: "text" as const, id: crypto.randomUUID(), pageIndex: i,
+      kind: "text" as const, id: generateId(), pageIndex: i,
       x: 0.5, y: 0.96, w: 0.2, h: 0.05, rotation: 0, text: `Page ${i + 1} of ${pages.length}`,
       fontSize: 12, color: "#64748b", bold: false, italic: false,
     }));
@@ -233,7 +233,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
     if (w > 0.01 && h > 0.005) {
       pushState([...annotations, {
-        kind: "highlight", id: crypto.randomUUID(), pageIndex: currentPage,
+        kind: "highlight", id: generateId(), pageIndex: currentPage,
         x: cx, y: cy, w, h, rotation: 0, color: "#fde047", opacity: 0.4,
       }], pages);
     }
@@ -244,7 +244,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   function commitTextInput() {
     if (!textInput || !textInput.text.trim()) { setTextInput(null); return; }
     pushState([...annotations, {
-      kind: "text", id: crypto.randomUUID(), pageIndex: currentPage,
+      kind: "text", id: generateId(), pageIndex: currentPage,
       x: textInput.x, y: textInput.y, w: 0.3, h: 0.05, rotation: 0, text: textInput.text.trim(),
       fontSize: 16, color: "#1e293b", bold: false, italic: false,
     }], pages);
@@ -255,7 +255,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   function handleSignatureApply(dataUrl: string) {
     setSigPadOpen(false);
     pushState([...annotations, {
-      kind: "signature", id: crypto.randomUUID(), pageIndex: currentPage,
+      kind: "signature", id: generateId(), pageIndex: currentPage,
       x: 0.5, y: 0.5, w: 0.4, h: 0.15, rotation: 0, dataUrl, opacity: 1,
     }], pages);
     setActiveTool("select");
@@ -265,7 +265,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   function handleWatermarkApply() {
     if (!watermarkText.trim()) return;
     const newAnns: AdvancedAnnotation[] = pages.map((_, i) => ({
-      kind: "watermark" as const, id: crypto.randomUUID(), pageIndex: i,
+      kind: "watermark" as const, id: generateId(), pageIndex: i,
       text: watermarkText.trim(), opacity: 0.08,
     }));
     pushState([...annotations, ...newAnns], pages);
@@ -662,4 +662,10 @@ function loadImg(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Image failed"));
     img.src = src;
   });
+}
+
+function generateId() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).substring(2, 15);
 }

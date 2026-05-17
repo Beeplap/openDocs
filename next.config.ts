@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Needed so Next.js dev HMR resources can be requested from devices on your LAN.
   // (Without this, browsers may block _next/webpack-hmr as cross-origin.)
-  allowedDevOrigins: ["192.168.1.115", "127.0.0.1"],
+  allowedDevOrigins: ["192.168.1.115", "192.168.1.93", "127.0.0.1"],
   // Silence the “workspace root inferred” warning caused by multiple lockfiles.
   // This keeps Turbopack rooted at this Next.js app directory.
   turbopack: {
