@@ -4,32 +4,87 @@ import SignaturePad from "./SignaturePad";
 import AdvancedToolbar from "./AdvancedToolbar";
 import type { Tool } from "./AdvancedToolbar";
 import type { AdvancedAnnotation } from "./types";
-import { renderPdfAllPagesToCanvases, buildAnnotatedPdf, getPdfPageCount } from "../../utils/pdfUtils";
+import { renderPdfAllPagesToCanvases, buildAnnotatedPdf } from "../../utils/pdfUtils";
 
-type PageData = { dataUrl: string; width: number; height: number; rotation: number };
+type PageData = { dataUrl: string; width: number; height: number; rotation: number; id: string };
 
-type Props = {
-  onStatusMessage: (msg: string) => void;
-};
+type HistoryEntry = { annotations: AdvancedAnnotation[]; pages: PageData[]; };
+
+type Props = { onStatusMessage: (msg: string) => void; };
 
 export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [pages, setPages] = useState<PageData[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [annotations, setAnnotations] = useState<AdvancedAnnotation[]>([]);
+  
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
   const [activeTool, setActiveTool] = useState<Tool>("select");
   const [sigPadOpen, setSigPadOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
   const [dragState, setDragState] = useState<{id:string;startX:number;startY:number;origX:number;origY:number}|null>(null);
-  const [resizeState, setResizeState] = useState<{id:string;startX:number;startY:number;origW:number;origH:number}|null>(null);
+  const [resizeState, setResizeState] = useState<{id:string;startX:number;startY:number;origW:number;origH:number;origX:number;origY:number;handle:string}|null>(null);
+  const [rotateState, setRotateState] = useState<{id:string;startX:number;startY:number;origRot:number;centerX:number;centerY:number}|null>(null);
+
   const [watermarkText, setWatermarkText] = useState("");
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
   const [textInput, setTextInput] = useState<{x:number;y:number;text:string}|null>(null);
   const [highlightDraw, setHighlightDraw] = useState<{startX:number;startY:number;curX:number;curY:number}|null>(null);
+  
   const pageRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const pushState = useCallback((newAnns: AdvancedAnnotation[], newPgs: PageData[]) => {
+    setHistory((prev) => {
+      const h = prev.slice(0, historyIndex + 1);
+      h.push({ annotations: newAnns, pages: newPgs });
+      if (h.length > 6) h.shift(); // Keep ~5 redos
+      setHistoryIndex(h.length - 1);
+      return h;
+    });
+    setAnnotations(newAnns);
+    setPages(newPgs);
+  }, [historyIndex]);
+
+  const undo = useCallback(() => {
+    setHistory((prev) => {
+      if (historyIndex > 0) {
+        const nextIdx = historyIndex - 1;
+        setAnnotations(prev[nextIdx].annotations);
+        setPages(prev[nextIdx].pages);
+        setHistoryIndex(nextIdx);
+      }
+      return prev;
+    });
+  }, [historyIndex]);
+
+  const redo = useCallback(() => {
+    setHistory((prev) => {
+      if (historyIndex < prev.length - 1) {
+        const nextIdx = historyIndex + 1;
+        setAnnotations(prev[nextIdx].annotations);
+        setPages(prev[nextIdx].pages);
+        setHistoryIndex(nextIdx);
+      }
+      return prev;
+    });
+  }, [historyIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        if (e.key === "z") { e.preventDefault(); undo(); }
+        else if (e.key === "y") { e.preventDefault(); redo(); }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
 
   const loadPdf = useCallback(async (f: File) => {
     setIsLoading(true);
@@ -37,10 +92,14 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     try {
       const canvases = await renderPdfAllPagesToCanvases(f, 2);
       const pagesData: PageData[] = canvases.map((c) => ({
+        id: crypto.randomUUID(),
         dataUrl: c.toDataURL("image/png"),
         width: c.width, height: c.height, rotation: 0,
       }));
       canvases.forEach((c) => c.remove());
+      
+      setHistory([{ annotations: [], pages: pagesData }]);
+      setHistoryIndex(0);
       setPages(pagesData);
       setCurrentPage(0);
       setAnnotations([]);
@@ -59,39 +118,59 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   }
 
   function rotatePage(dir: 1 | -1) {
-    setPages((p) => p.map((pg, i) => i === currentPage ? { ...pg, rotation: pg.rotation + dir * 90 } : pg));
+    const newPages = pages.map((pg, i) => i === currentPage ? { ...pg, rotation: pg.rotation + dir * 90 } : pg);
+    pushState(annotations, newPages);
   }
 
   function deletePage() {
     if (pages.length <= 1) return;
-    setPages((p) => p.filter((_, i) => i !== currentPage));
-    setAnnotations((a) => a.filter((an) => an.pageIndex !== currentPage).map((an) =>
-      an.pageIndex > currentPage ? { ...an, pageIndex: an.pageIndex - 1 } : an));
-    setCurrentPage((c) => Math.min(c, pages.length - 2));
+    const newPages = pages.filter((_, i) => i !== currentPage);
+    const newAnns = annotations.filter((an) => an.pageIndex !== currentPage).map((an) =>
+      an.pageIndex > currentPage ? { ...an, pageIndex: an.pageIndex - 1 } : an);
+    pushState(newAnns, newPages);
+    setCurrentPage((c) => Math.min(c, newPages.length - 1));
+  }
+
+  function reorderPage(dir: 1 | -1, idx: number) {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= pages.length) return;
+    const newPages = [...pages];
+    const temp = newPages[idx];
+    newPages[idx] = newPages[newIdx];
+    newPages[newIdx] = temp;
+    
+    // update annotations page indexes
+    const newAnns = annotations.map(a => {
+      if (a.pageIndex === idx) return { ...a, pageIndex: newIdx };
+      if (a.pageIndex === newIdx) return { ...a, pageIndex: idx };
+      return a;
+    });
+    pushState(newAnns, newPages);
+    if (currentPage === idx) setCurrentPage(newIdx);
+    else if (currentPage === newIdx) setCurrentPage(idx);
   }
 
   function addPageNumbers() {
     const existing = annotations.filter((a) => a.kind === "text" && a.text.startsWith("Page "));
     if (existing.length > 0) {
-      setAnnotations((a) => a.filter((an) => !(an.kind === "text" && an.text.startsWith("Page "))));
+      pushState(annotations.filter((an) => !(an.kind === "text" && an.text.startsWith("Page "))), pages);
       onStatusMessage("Page numbers removed.");
       return;
     }
     const newAnns: AdvancedAnnotation[] = pages.map((_, i) => ({
       kind: "text" as const, id: crypto.randomUUID(), pageIndex: i,
-      x: 0.5, y: 0.96, text: `Page ${i + 1} of ${pages.length}`,
+      x: 0.5, y: 0.96, w: 0.2, h: 0.05, rotation: 0, text: `Page ${i + 1} of ${pages.length}`,
       fontSize: 12, color: "#64748b", bold: false, italic: false,
     }));
-    setAnnotations((a) => [...a, ...newAnns]);
+    pushState([...annotations, ...newAnns], pages);
     onStatusMessage("Page numbers added.");
   }
 
   function deleteAnnotation(id: string) {
-    setAnnotations((a) => a.filter((an) => an.id !== id));
+    pushState(annotations.filter((an) => an.id !== id), pages);
     if (selectedId === id) setSelectedId(null);
   }
 
-  // Get relative coords from pointer event on page container
   function getRelCoords(e: React.PointerEvent | React.MouseEvent): {rx: number; ry: number} | null {
     const el = pageRef.current;
     if (!el) return null;
@@ -115,7 +194,13 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       return;
     }
     if (activeTool === "select") {
-      setSelectedId(null);
+      // only clear if clicking directly on the container
+      if ((e.target as HTMLElement).tagName.toLowerCase() === "img" || (e.target as HTMLElement).tagName.toLowerCase() === "div") {
+        // verify it's the main container
+        if ((e.target as HTMLElement).draggable === false) {
+          setSelectedId(null);
+        }
+      }
     }
   }
 
@@ -137,61 +222,65 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
   function handleHighlightUp() {
     if (!highlightDraw) return;
-    const x = Math.min(highlightDraw.startX, highlightDraw.curX);
-    const y = Math.min(highlightDraw.startY, highlightDraw.curY);
-    const w = Math.abs(highlightDraw.curX - highlightDraw.startX);
-    const h = Math.abs(highlightDraw.curY - highlightDraw.startY);
+    const startX = highlightDraw.startX;
+    const startY = highlightDraw.startY;
+    const curX = highlightDraw.curX;
+    const curY = highlightDraw.curY;
+    const w = Math.abs(curX - startX);
+    const h = Math.abs(curY - startY);
+    const cx = Math.min(startX, curX) + w/2;
+    const cy = Math.min(startY, curY) + h/2;
+
     if (w > 0.01 && h > 0.005) {
-      setAnnotations((a) => [...a, {
+      pushState([...annotations, {
         kind: "highlight", id: crypto.randomUUID(), pageIndex: currentPage,
-        x, y, w, h, color: "#fde047", opacity: 0.4,
-      }]);
+        x: cx, y: cy, w, h, rotation: 0, color: "#fde047", opacity: 0.4,
+      }], pages);
     }
     setHighlightDraw(null);
+    setActiveTool("select");
   }
 
   function commitTextInput() {
     if (!textInput || !textInput.text.trim()) { setTextInput(null); return; }
-    setAnnotations((a) => [...a, {
+    pushState([...annotations, {
       kind: "text", id: crypto.randomUUID(), pageIndex: currentPage,
-      x: textInput.x, y: textInput.y, text: textInput.text.trim(),
+      x: textInput.x, y: textInput.y, w: 0.3, h: 0.05, rotation: 0, text: textInput.text.trim(),
       fontSize: 16, color: "#1e293b", bold: false, italic: false,
-    }]);
+    }], pages);
     setTextInput(null);
     setActiveTool("select");
   }
 
   function handleSignatureApply(dataUrl: string) {
     setSigPadOpen(false);
-    setAnnotations((a) => [...a, {
+    pushState([...annotations, {
       kind: "signature", id: crypto.randomUUID(), pageIndex: currentPage,
-      x: 0.3, y: 0.6, w: 0.4, h: 0.15, dataUrl, opacity: 1,
-    }]);
+      x: 0.5, y: 0.5, w: 0.4, h: 0.15, rotation: 0, dataUrl, opacity: 1,
+    }], pages);
     setActiveTool("select");
-    onStatusMessage("Signature added. Drag to reposition, drag corners to resize.");
+    onStatusMessage("Signature added. Drag to reposition, resize, or rotate.");
   }
 
   function handleWatermarkApply() {
     if (!watermarkText.trim()) return;
-    pages.forEach((_, i) => {
-      setAnnotations((a) => [...a, {
-        kind: "text", id: crypto.randomUUID(), pageIndex: i,
-        x: 0.5, y: 0.5, text: watermarkText.trim(),
-        fontSize: 48, color: "rgba(148,163,184,0.3)", bold: true, italic: true,
-      }]);
-    });
+    const newAnns: AdvancedAnnotation[] = pages.map((_, i) => ({
+      kind: "watermark" as const, id: crypto.randomUUID(), pageIndex: i,
+      text: watermarkText.trim(), opacity: 0.08,
+    }));
+    pushState([...annotations, ...newAnns], pages);
     setShowWatermarkDialog(false);
     setWatermarkText("");
-    onStatusMessage("Watermark applied to all pages.");
+    onStatusMessage("Repeating watermark applied to all pages.");
   }
 
-  // Drag & resize annotations
+  // --- Transform Logic ---
   function startDrag(id: string, e: React.PointerEvent) {
     if (activeTool !== "select") return;
     e.preventDefault(); e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const ann = annotations.find((a) => a.id === id);
-    if (!ann) return;
+    if (!ann || ann.kind === "watermark") return;
     setSelectedId(id);
     setDragState({ id, startX: e.clientX, startY: e.clientY, origX: ann.x, origY: ann.y });
   }
@@ -204,18 +293,23 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     const dx = (e.clientX - dragState.startX) / rect.width;
     const dy = (e.clientY - dragState.startY) / rect.height;
     setAnnotations((a) => a.map((an) =>
-      an.id === dragState.id ? { ...an, x: clamp(dragState.origX + dx, 0, 1), y: clamp(dragState.origY + dy, 0, 1) } : an
+      an.id === dragState.id && an.kind !== "watermark" ? { ...an, x: clamp(dragState.origX + dx, 0, 1), y: clamp(dragState.origY + dy, 0, 1) } : an
     ));
   }
 
-  function onDragEnd() { setDragState(null); }
+  function onDragEnd() {
+    if (dragState) {
+      pushState(annotations, pages); // commit drag
+      setDragState(null);
+    }
+  }
 
-  function startResize(id: string, e: React.PointerEvent) {
+  function startResize(id: string, e: React.PointerEvent, handle: string) {
     e.preventDefault(); e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const ann = annotations.find((a) => a.id === id);
-    if (!ann || ann.kind !== "signature") return;
-    setResizeState({ id, startX: e.clientX, startY: e.clientY, origW: ann.w, origH: ann.h });
+    if (!ann || ann.kind === "watermark") return;
+    setResizeState({ id, startX: e.clientX, startY: e.clientY, origW: ann.w, origH: ann.h, origX: ann.x, origY: ann.y, handle });
   }
 
   function onResizeMove(e: React.PointerEvent) {
@@ -223,15 +317,78 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     const el = pageRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const dw = (e.clientX - resizeState.startX) / rect.width;
-    const dh = (e.clientY - resizeState.startY) / rect.height;
+    const dx = (e.clientX - resizeState.startX) / rect.width;
+    const dy = (e.clientY - resizeState.startY) / rect.height;
+    
+    setAnnotations((a) => a.map((an) => {
+      if (an.id !== resizeState.id || an.kind === "watermark") return an;
+      let newW = resizeState.origW;
+      let newH = resizeState.origH;
+      let newX = resizeState.origX;
+      let newY = resizeState.origY;
+      
+      const { handle } = resizeState;
+      if (handle.includes("e")) newW += dx;
+      if (handle.includes("w")) { newW -= dx; newX += dx/2; }
+      if (handle.includes("s")) newH += dy;
+      if (handle.includes("n")) { newH -= dy; newY += dy/2; }
+      if (handle.includes("e")) newX += dx/2;
+      if (handle.includes("s")) newY += dy/2;
+
+      // Ensure positive dimensions
+      if (newW < 0.02) newW = 0.02;
+      if (newH < 0.02) newH = 0.02;
+      
+      // Scale font if it's text
+      let scaledFont = an.kind === "text" ? an.fontSize : undefined;
+      if (an.kind === "text") {
+         const scale = newH / resizeState.origH;
+         scaledFont = Math.max(8, an.fontSize * scale);
+      }
+
+      return { ...an, w: newW, h: newH, x: newX, y: newY, fontSize: scaledFont ?? (an as any).fontSize };
+    }));
+  }
+
+  function onResizeEnd() {
+    if (resizeState) {
+      pushState(annotations, pages);
+      setResizeState(null);
+    }
+  }
+
+  function startRotate(id: string, e: React.PointerEvent) {
+    e.preventDefault(); e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const ann = annotations.find((a) => a.id === id);
+    if (!ann || ann.kind === "watermark") return;
+    const el = pageRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setRotateState({ id, startX: e.clientX, startY: e.clientY, origRot: ann.rotation, centerX: rect.left + ann.x * rect.width, centerY: rect.top + ann.y * rect.height });
+  }
+
+  function onRotateMove(e: React.PointerEvent) {
+    if (!rotateState) return;
+    const dx1 = rotateState.startX - rotateState.centerX;
+    const dy1 = rotateState.startY - rotateState.centerY;
+    const dx2 = e.clientX - rotateState.centerX;
+    const dy2 = e.clientY - rotateState.centerY;
+    const angle1 = Math.atan2(dy1, dx1);
+    const angle2 = Math.atan2(dy2, dx2);
+    const delta = (angle2 - angle1) * (180 / Math.PI);
+    
     setAnnotations((a) => a.map((an) =>
-      an.id === resizeState.id && an.kind === "signature"
-        ? { ...an, w: clamp(resizeState.origW + dw, 0.05, 0.9), h: clamp(resizeState.origH + dh, 0.03, 0.6) } : an
+      an.id === rotateState.id && an.kind !== "watermark" ? { ...an, rotation: rotateState.origRot + delta } : an
     ));
   }
 
-  function onResizeEnd() { setResizeState(null); }
+  function onRotateEnd() {
+    if (rotateState) {
+      pushState(annotations, pages);
+      setRotateState(null);
+    }
+  }
 
   async function exportPdf() {
     if (pages.length === 0) return;
@@ -248,34 +405,50 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
         const ctx = canvas.getContext("2d")!;
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, w, h);
-        // Draw rotated page image
+        
+        // Draw page
         const img = await loadImg(pg.dataUrl);
         ctx.save();
         ctx.translate(w / 2, h / 2);
         ctx.rotate((pg.rotation * Math.PI) / 180);
         ctx.drawImage(img, -pg.width / 2, -pg.height / 2, pg.width, pg.height);
         ctx.restore();
+        
         // Draw annotations
         const pageAnns = annotations.filter((a) => a.pageIndex === i);
         for (const ann of pageAnns) {
-          if (ann.kind === "text") {
+          if (ann.kind === "watermark") {
+             ctx.save();
+             ctx.fillStyle = `rgba(148,163,184,${ann.opacity})`;
+             ctx.font = "bold italic 48px sans-serif";
+             ctx.rotate(-45 * Math.PI / 180);
+             // tile watermark
+             for (let wx = -w; wx < w*2; wx+=300) {
+                for (let wy = -h; wy < h*2; wy+=200) {
+                   ctx.fillText(ann.text, wx, wy);
+                }
+             }
+             ctx.restore();
+          } else {
             ctx.save();
-            ctx.font = `${ann.italic ? "italic " : ""}${ann.bold ? "bold " : ""}${Math.round(ann.fontSize * (w / 800))}px sans-serif`;
-            ctx.fillStyle = ann.color;
-            ctx.textAlign = "center";
-            ctx.fillText(ann.text, ann.x * w, ann.y * h);
-            ctx.restore();
-          } else if (ann.kind === "highlight") {
-            ctx.save();
-            ctx.fillStyle = ann.color;
-            ctx.globalAlpha = ann.opacity;
-            ctx.fillRect(ann.x * w, ann.y * h, ann.w * w, ann.h * h);
-            ctx.restore();
-          } else if (ann.kind === "signature") {
-            const sigImg = await loadImg(ann.dataUrl);
-            ctx.save();
-            ctx.globalAlpha = ann.opacity;
-            ctx.drawImage(sigImg, ann.x * w, ann.y * h, ann.w * w, ann.h * h);
+            ctx.translate(ann.x * w, ann.y * h);
+            ctx.rotate((ann.rotation * Math.PI) / 180);
+            
+            if (ann.kind === "text") {
+              ctx.font = `${ann.italic ? "italic " : ""}${ann.bold ? "bold " : ""}${Math.round(ann.fontSize * (w / 800))}px sans-serif`;
+              ctx.fillStyle = ann.color;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText(ann.text, 0, 0);
+            } else if (ann.kind === "highlight") {
+              ctx.fillStyle = ann.color;
+              ctx.globalAlpha = ann.opacity;
+              ctx.fillRect(-ann.w * w / 2, -ann.h * h / 2, ann.w * w, ann.h * h);
+            } else if (ann.kind === "signature") {
+              const sigImg = await loadImg(ann.dataUrl);
+              ctx.globalAlpha = ann.opacity;
+              ctx.drawImage(sigImg, -ann.w * w / 2, -ann.h * h / 2, ann.w * w, ann.h * h);
+            }
             ctx.restore();
           }
         }
@@ -294,9 +467,11 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   }
 
   const page = pages[currentPage] ?? null;
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
 
   return (
-    <div className="panel overflow-hidden">
+    <div className="panel overflow-hidden flex flex-col">
       <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
       <SignaturePad open={sigPadOpen} onApply={handleSignatureApply} onClose={() => setSigPadOpen(false)} />
 
@@ -304,7 +479,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       {showWatermarkDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-slate-900 mb-3">Add Watermark</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">Add Repeating Watermark</h3>
             <input type="text" value={watermarkText} onChange={(e) => setWatermarkText(e.target.value)}
               placeholder="Watermark text..." className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm mb-4" autoFocus />
             <div className="flex gap-3 justify-end">
@@ -317,9 +492,20 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_300px]">
+      {/* Mobile Top Toolbar for Undo/Redo */}
+      {pages.length > 0 && (
+        <div className="lg:hidden flex items-center justify-between bg-white border-b border-slate-200 p-2">
+           <span className="text-sm font-medium text-slate-600 px-2">Editor</span>
+           <div className="flex gap-2">
+              <button type="button" onClick={undo} disabled={!canUndo} className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 font-medium text-sm">↶ Undo</button>
+              <button type="button" onClick={redo} disabled={!canRedo} className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 font-medium text-sm">↷ Redo</button>
+           </div>
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] flex-1 overflow-hidden">
         {/* Main page view */}
-        <div className="bg-slate-100 p-4 sm:p-6">
+        <div className="bg-slate-100 p-4 sm:p-6 overflow-y-auto flex flex-col items-center">
           {isLoading ? (
             <div className="flex h-64 items-center justify-center text-sm text-slate-500">Loading pages...</div>
           ) : !page ? (
@@ -333,12 +519,24 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
           ) : (
             <>
               {/* Page canvas */}
-              <div className="mx-auto max-w-[600px]">
+              <div className="w-full max-w-[600px] select-none">
                 <div ref={pageRef} className="relative overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-slate-200"
                   style={{ aspectRatio: page.rotation % 180 !== 0 ? `${page.height}/${page.width}` : `${page.width}/${page.height}` }}
                   onClick={handlePageClick}
-                  onPointerDown={handleHighlightDown} onPointerMove={(e) => { handleHighlightMove(e); onDragMove(e); onResizeMove(e); }}
-                  onPointerUp={(e) => { handleHighlightUp(); onDragEnd(); onResizeEnd(); }}>
+                  onPointerDown={handleHighlightDown} onPointerMove={(e) => { handleHighlightMove(e); onDragMove(e); onResizeMove(e); onRotateMove(e); }}
+                  onPointerUp={(e) => { handleHighlightUp(); onDragEnd(); onResizeEnd(); onRotateEnd(); }}>
+                  
+                  {/* Watermark Preview */}
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-10">
+                    {annotations.filter(a => a.pageIndex === currentPage && a.kind === "watermark").map(ann => (
+                       <div key={ann.id} className="absolute -inset-[100%] flex flex-wrap content-start" style={{ transform: "rotate(-45deg)" }}>
+                         {Array.from({length: 100}).map((_, i) => (
+                           <span key={i} className="text-4xl font-bold italic m-10 whitespace-nowrap">{(ann as any).text}</span>
+                         ))}
+                       </div>
+                    ))}
+                  </div>
+
                   <img src={page.dataUrl} alt={`Page ${currentPage + 1}`}
                     className="h-full w-full object-contain pointer-events-none"
                     style={{ transform: `rotate(${page.rotation}deg)` }} draggable={false} />
@@ -365,57 +563,71 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                   )}
 
                   {/* Render annotations */}
-                  {annotations.filter((a) => a.pageIndex === currentPage).map((ann) => {
-                    if (ann.kind === "text") {
-                      return (
-                        <div key={ann.id} className={`absolute select-none cursor-move ${selectedId === ann.id ? "ring-2 ring-emerald-500 rounded" : ""}`}
-                          style={{ left: `${ann.x * 100}%`, top: `${ann.y * 100}%`, transform: "translate(-50%, -50%)",
-                            fontSize: `${ann.fontSize}px`, color: ann.color,
-                            fontWeight: ann.bold ? "bold" : "normal", fontStyle: ann.italic ? "italic" : "normal" }}
-                          onPointerDown={(e) => startDrag(ann.id, e)}>
-                          {ann.text}
+                  {annotations.filter((a) => a.pageIndex === currentPage && a.kind !== "watermark").map((ann) => {
+                    if (ann.kind === "watermark") return null;
+                    const isSelected = selectedId === ann.id;
+                    return (
+                      <div key={ann.id} className={`absolute cursor-move ${isSelected ? "ring-2 ring-emerald-500 bg-emerald-500/10" : ""}`}
+                        style={{
+                          left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
+                          width: `${ann.w * 100}%`, height: `${ann.h * 100}%`,
+                          transform: `translate(-50%, -50%) rotate(${ann.rotation}deg)`,
+                        }}
+                        onPointerDown={(e) => startDrag(ann.id, e)}>
+                        
+                        {/* Content rendering */}
+                        <div className="w-full h-full pointer-events-none flex items-center justify-center">
+                           {ann.kind === "text" && (
+                              <span style={{ fontSize: `${ann.fontSize}px`, color: ann.color, fontWeight: ann.bold ? "bold" : "normal", fontStyle: ann.italic ? "italic" : "normal", whiteSpace: "nowrap" }}>
+                                {ann.text}
+                              </span>
+                           )}
+                           {ann.kind === "highlight" && (
+                              <div style={{ backgroundColor: ann.color, opacity: ann.opacity, width: "100%", height: "100%" }} />
+                           )}
+                           {ann.kind === "signature" && (
+                              <img src={ann.dataUrl} alt="Signature" className="h-full w-full object-contain" draggable={false} />
+                           )}
                         </div>
-                      );
-                    }
-                    if (ann.kind === "highlight") {
-                      return (
-                        <div key={ann.id} className={`absolute cursor-move ${selectedId === ann.id ? "ring-2 ring-emerald-500" : ""}`}
-                          style={{ left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
-                            width: `${ann.w * 100}%`, height: `${ann.h * 100}%`,
-                            backgroundColor: ann.color, opacity: ann.opacity }}
-                          onPointerDown={(e) => startDrag(ann.id, e)} />
-                      );
-                    }
-                    if (ann.kind === "signature") {
-                      const isSelected = selectedId === ann.id;
-                      return (
-                        <div key={ann.id} className={`absolute cursor-move ${isSelected ? "ring-2 ring-emerald-500" : ""}`}
-                          style={{ left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
-                            width: `${ann.w * 100}%`, height: `${ann.h * 100}%`, opacity: ann.opacity }}
-                          onPointerDown={(e) => startDrag(ann.id, e)}>
-                          <img src={ann.dataUrl} alt="Signature" className="h-full w-full object-contain pointer-events-none" draggable={false} />
-                          {isSelected && (
-                            <div className="absolute -bottom-2 -right-2 h-5 w-5 rounded-full bg-emerald-500 border-2 border-white cursor-se-resize shadow-lg"
-                              onPointerDown={(e) => startResize(ann.id, e)} />
-                          )}
-                        </div>
-                      );
-                    }
-                    return null;
+
+                        {/* Transform Handles */}
+                        {isSelected && (
+                          <>
+                            <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-emerald-500 rounded-full cursor-nw-resize" onPointerDown={(e) => startResize(ann.id, e, "nw")} />
+                            <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-emerald-500 rounded-full cursor-ne-resize" onPointerDown={(e) => startResize(ann.id, e, "ne")} />
+                            <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-emerald-500 rounded-full cursor-sw-resize" onPointerDown={(e) => startResize(ann.id, e, "sw")} />
+                            <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-emerald-500 rounded-full cursor-se-resize" onPointerDown={(e) => startResize(ann.id, e, "se")} />
+                            {/* Rotate handle */}
+                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-4 h-4 bg-emerald-500 text-white rounded-full cursor-crosshair flex items-center justify-center shadow-md" onPointerDown={(e) => startRotate(ann.id, e)}>
+                               <span className="text-[10px]">↻</span>
+                            </div>
+                            {/* connecting line */}
+                            <div className="absolute -top-4 left-1/2 w-px h-4 bg-emerald-500 pointer-events-none" />
+                          </>
+                        )}
+                      </div>
+                    );
                   })}
                 </div>
               </div>
 
-              {/* Page thumbnails */}
-              <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+              {/* Page thumbnails w/ Reorder */}
+              <div className="mt-4 flex gap-3 overflow-x-auto pb-4 w-full px-2 items-center">
                 {pages.map((pg, i) => (
-                  <button key={i} type="button" onClick={() => { setCurrentPage(i); setSelectedId(null); }}
-                    className={`flex-shrink-0 rounded-xl overflow-hidden border-2 transition ${
-                      i === currentPage ? "border-emerald-500 shadow-md" : "border-slate-200 hover:border-slate-300"
-                    }`} style={{ width: 64, height: 80 }}>
-                    <img src={pg.dataUrl} alt={`Page ${i + 1}`} className="h-full w-full object-cover"
-                      style={{ transform: `rotate(${pg.rotation}deg)` }} draggable={false} />
-                  </button>
+                  <div key={pg.id} className="flex flex-col gap-1 items-center">
+                     <button type="button" onClick={() => { setCurrentPage(i); setSelectedId(null); }}
+                       className={`flex-shrink-0 rounded-xl overflow-hidden border-2 transition ${
+                         i === currentPage ? "border-emerald-500 shadow-md scale-105" : "border-slate-200 hover:border-slate-300"
+                       }`} style={{ width: 72, height: 90 }}>
+                       <img src={pg.dataUrl} alt={`Page ${i + 1}`} className="h-full w-full object-cover"
+                         style={{ transform: `rotate(${pg.rotation}deg)` }} draggable={false} />
+                     </button>
+                     <div className="flex items-center gap-1 bg-white rounded-full shadow-sm border border-slate-200 px-1">
+                        <button type="button" onClick={() => reorderPage(-1, i)} disabled={i === 0} className="p-1 text-slate-400 hover:text-emerald-600 disabled:opacity-30">◀</button>
+                        <span className="text-[10px] font-semibold text-slate-500">{i + 1}</span>
+                        <button type="button" onClick={() => reorderPage(1, i)} disabled={i === pages.length - 1} className="p-1 text-slate-400 hover:text-emerald-600 disabled:opacity-30">▶</button>
+                     </div>
+                  </div>
                 ))}
               </div>
             </>
@@ -433,6 +645,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
             pageCount={pages.length} currentPage={currentPage}
             annotations={annotations} onDeleteAnnotation={deleteAnnotation}
             selectedAnnotationId={selectedId}
+            canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo}
           />
         </div>
       </div>

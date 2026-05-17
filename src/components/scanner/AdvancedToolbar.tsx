@@ -19,6 +19,10 @@ type Props = {
   annotations: AdvancedAnnotation[];
   onDeleteAnnotation: (id: string) => void;
   selectedAnnotationId: string | null;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  undo?: () => void;
+  redo?: () => void;
 };
 
 const tools: { id: Tool; label: string; icon: string }[] = [
@@ -33,6 +37,7 @@ export default function AdvancedToolbar({
   activeTool, setActiveTool, onRotatePage, onDeletePage,
   onAddPageNumbers, onDownload, onUpload, isExporting,
   hasPages, pageCount, currentPage, annotations, onDeleteAnnotation, selectedAnnotationId,
+  canUndo, canRedo, undo, redo
 }: Props) {
   const pageAnnotations = annotations.filter((a) => a.pageIndex === currentPage);
 
@@ -61,6 +66,16 @@ export default function AdvancedToolbar({
                 </button>
               ))}
             </div>
+            {undo && redo && (
+              <div className="hidden lg:grid grid-cols-2 gap-1.5 mt-2">
+                 <button type="button" onClick={undo} disabled={!canUndo} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
+                    ↶ Undo
+                 </button>
+                 <button type="button" onClick={redo} disabled={!canRedo} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
+                    ↷ Redo
+                 </button>
+              </div>
+            )}
           </div>
 
           {/* Page actions */}
