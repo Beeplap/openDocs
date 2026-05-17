@@ -23,6 +23,7 @@ type Props = {
   canRedo?: boolean;
   undo?: () => void;
   redo?: () => void;
+  onUpdateAnnotation?: (id: string, updates: Partial<AdvancedAnnotation>) => void;
 };
 
 const tools: { id: Tool; label: string; icon: string }[] = [
@@ -37,9 +38,10 @@ export default function AdvancedToolbar({
   activeTool, setActiveTool, onRotatePage, onDeletePage,
   onAddPageNumbers, onDownload, onUpload, isExporting,
   hasPages, pageCount, currentPage, annotations, onDeleteAnnotation, selectedAnnotationId,
-  canUndo, canRedo, undo, redo
+  canUndo, canRedo, undo, redo, onUpdateAnnotation
 }: Props) {
   const pageAnnotations = annotations.filter((a) => a.pageIndex === currentPage);
+  const selectedAnn = annotations.find((a) => a.id === selectedAnnotationId);
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5">
@@ -100,6 +102,32 @@ export default function AdvancedToolbar({
               </button>
             </div>
           </div>
+
+          {/* Text Formatting */}
+          {selectedAnn && selectedAnn.kind === "text" && onUpdateAnnotation && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Text Formatting</p>
+              <div className="flex flex-wrap gap-2 items-center bg-white rounded-xl border border-slate-200 p-2">
+                <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { bold: !selectedAnn.bold })}
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg font-serif font-bold transition ${selectedAnn.bold ? "bg-emerald-100 text-emerald-800" : "text-slate-600 hover:bg-slate-100"}`}>
+                  B
+                </button>
+                <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { italic: !selectedAnn.italic })}
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg font-serif italic transition ${selectedAnn.italic ? "bg-emerald-100 text-emerald-800" : "text-slate-600 hover:bg-slate-100"}`}>
+                  I
+                </button>
+                <div className="w-px h-6 bg-slate-200 mx-1" />
+                <input type="number" min="8" max="120" value={selectedAnn.fontSize || 16}
+                  onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontSize: parseInt(e.target.value) || 16 })}
+                  className="w-14 rounded-lg border border-slate-200 px-2 py-1 text-sm text-center outline-none focus:border-emerald-500" />
+                <span className="text-xs text-slate-400">px</span>
+                <div className="w-px h-6 bg-slate-200 mx-1" />
+                <input type="color" value={selectedAnn.color || "#1e293b"}
+                  onChange={(e) => onUpdateAnnotation(selectedAnn.id, { color: e.target.value })}
+                  className="h-7 w-7 cursor-pointer rounded-full border-0 p-0" />
+              </div>
+            </div>
+          )}
 
           {/* Annotations list */}
           {pageAnnotations.length > 0 && (
