@@ -75,8 +75,7 @@ export default function PdfEditorModal({
       <div className="max-h-[96vh] w-full max-w-6xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">A4 PDF editor</p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-900">Page {pageIndex + 1}</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Page {pageIndex + 1}</h2>
           </div>
           <button
             type="button"
@@ -171,8 +170,7 @@ export default function PdfEditorModal({
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Adjust</p>
-                    <h3 className="mt-1 truncate text-base font-semibold text-slate-900">{pdfEditorActiveItem.name}</h3>
+                    <h3 className="truncate text-base font-semibold text-slate-900">{pdfEditorActiveItem.name}</h3>
                   </div>
                   <button
                     type="button"

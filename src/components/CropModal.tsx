@@ -340,9 +340,6 @@ export default function CropModal({ open, imageUrl, initialCrop, title, onCancel
 
           <div className="rounded-[24px] border border-slate-200 bg-white p-4">
             <p className="text-sm font-semibold text-slate-900">Corners</p>
-            <p className="mt-2 text-xs leading-5 text-slate-500">
-              Drag each point to the document corners. Drag inside the outline to move the whole shape.
-            </p>
 
             <div className="mt-4 grid gap-2">
               <button
@@ -382,9 +379,6 @@ export default function CropModal({ open, imageUrl, initialCrop, title, onCancel
               </button>
             </div>
 
-            <p className="mt-4 text-xs leading-5 text-slate-500">
-              Crop points are saved with this page, so reopening the editor keeps your outline.
-            </p>
           </div>
         </div>
       </div>

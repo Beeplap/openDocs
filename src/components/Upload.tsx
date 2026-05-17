@@ -73,8 +73,7 @@ export default function Upload({
             : "border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-white"
         } disabled:cursor-not-allowed disabled:opacity-60`}
       >
-        <span className="text-base font-semibold text-slate-950">Drop a file here</span>
-        <span className="mt-2 text-sm text-slate-500">or click to choose an image / PDF</span>
+        <span className="text-base font-semibold text-slate-950">Drop or choose file</span>
       </button>
       {showPhotoPicker ? (
         <button

@@ -619,24 +619,12 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
         </div>
       )}
 
-      {/* Mobile Top Toolbar for Undo/Redo */}
-      {pages.length > 0 && (
-        <div className="lg:hidden flex items-center justify-between bg-white border-b border-slate-200 p-2">
-           <span className="text-sm font-medium text-slate-600 px-2">Editor</span>
-           <div className="flex gap-2">
-              <button type="button" onClick={undo} disabled={!canUndo} className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 font-medium text-sm">↶ Undo</button>
-              <button type="button" onClick={redo} disabled={!canRedo} className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 font-medium text-sm">↷ Redo</button>
-           </div>
-        </div>
-      )}
-
       {!page && !isLoading ? (
         <div className="flex-1 bg-white p-6 lg:p-12 overflow-y-auto w-full">
           <div className="mx-auto max-w-4xl">
             <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Advanced Editor</p>
-                <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">Edit PDF documents</h1>
+                <h1 className="text-3xl font-bold tracking-tight text-slate-900">PDF Editor</h1>
               </div>
               <button type="button" onClick={() => fileInputRef.current?.click()}
                 className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition">
@@ -658,16 +646,66 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
               onClick={() => fileInputRef.current?.click()}
               className="group flex min-h-[400px] cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 hover:border-emerald-400 hover:bg-emerald-50/50 transition">
               <div className="text-center">
-                <h3 className="text-xl font-semibold text-slate-900">Drop a file here</h3>
-                <p className="mt-2 text-sm text-slate-500">or click to choose a PDF. Files are processed locally in your browser.</p>
+                <h3 className="text-xl font-semibold text-slate-900">Drop or choose PDF</h3>
               </div>
             </div>
           </div>
         </div>
       ) : (
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] flex-1 overflow-hidden">
-          {/* Main page view */}
-          <div className="bg-slate-100 p-4 sm:p-6 overflow-y-auto flex flex-col items-center">
+        <div className="flex flex-1 overflow-hidden bg-slate-100">
+          <aside className="hidden w-48 shrink-0 overflow-y-auto border-r border-blue-100 bg-blue-50/70 p-4 md:block">
+            <div className="flex flex-col items-center gap-4">
+              {pages.map((pg, i) => (
+                <div key={pg.id} className="flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setCurrentPage(i); setSelectedId(null); }}
+                    className={`relative overflow-hidden bg-white shadow-sm transition ${
+                      i === currentPage ? "ring-2 ring-blue-500" : "ring-1 ring-slate-200 hover:ring-blue-300"
+                    }`}
+                    style={{ width: 112, height: 146 }}
+                  >
+                    <img src={pg.dataUrl} alt={`Page ${i + 1}`} className="h-full w-full object-cover"
+                      style={{ transform: `rotate(${pg.rotation}deg)` }} draggable={false} />
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => reorderPage(-1, i)} disabled={i === 0} className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-slate-500 shadow-sm ring-1 ring-slate-200 hover:text-blue-600 disabled:opacity-30">‹</button>
+                    <span className="text-sm font-semibold text-slate-900">{i + 1}</span>
+                    <button type="button" onClick={() => reorderPage(1, i)} disabled={i === pages.length - 1} className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-slate-500 shadow-sm ring-1 ring-slate-200 hover:text-blue-600 disabled:opacity-30">›</button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-2xl leading-none text-white shadow-sm hover:bg-blue-600"
+                aria-label="Add PDF"
+              >
+                +
+              </button>
+            </div>
+          </aside>
+
+          <div className="flex min-w-0 flex-1 flex-col">
+            <AdvancedToolbar
+              activeTool={activeTool} setActiveTool={setActiveTool}
+              onRotatePage={rotatePage} onDeletePage={deletePage}
+              onAddPageNumbers={addPageNumbers} onDownload={exportPdf}
+              onUpload={() => fileInputRef.current?.click()}
+              isExporting={isExporting} hasPages={pages.length > 0}
+              pageCount={pages.length} currentPage={currentPage}
+              annotations={annotations} onDeleteAnnotation={deleteAnnotation}
+              onUpdateAnnotation={(id, updates) => {
+                updateAnnotation(id, updates);
+                commitAnnotationEdits();
+              }}
+              selectedAnnotationId={selectedId}
+              canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo}
+            />
+
+            {/* Main page view */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             {isLoading ? (
               <div className="flex h-64 flex-col items-center justify-center gap-3">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600"></div>
@@ -676,8 +714,8 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
             ) : (
               <>
                 {/* Page canvas */}
-                <div className="w-full max-w-[600px] select-none">
-                  <div ref={pageRef} className="relative overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-slate-200 touch-none"
+                <div className="mx-auto w-full max-w-[900px] select-none">
+                  <div ref={pageRef} className="relative overflow-hidden bg-white shadow-xl ring-1 ring-slate-200 touch-none"
                     style={{ aspectRatio: page!.rotation % 180 !== 0 ? `${page!.height}/${page!.width}` : `${page!.width}/${page!.height}` }}
                     onClick={handlePageClick}
                     onContextMenu={handlePageContextMenu}
@@ -727,7 +765,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                       if (ann.kind === "watermark") return null;
                       const isSelected = selectedId === ann.id;
                       return (
-                        <div key={ann.id} data-annotation-id={ann.id} className={`annotation-layer group absolute cursor-move rounded-sm border ${isSelected ? "border-emerald-400 ring-2 ring-emerald-500 bg-emerald-500/10" : "border-transparent hover:border-emerald-300/70"}`}
+                        <div key={ann.id} data-annotation-id={ann.id} className={`annotation-layer group absolute cursor-move border ${isSelected ? "border-blue-400" : "border-transparent hover:border-blue-300/80"}`}
                           style={{
                             left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
                             width: `${ann.w * 100}%`, height: `${ann.h * 100}%`,
@@ -781,16 +819,31 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                           {/* Transform Handles */}
                           {isSelected && (
                             <>
-                              <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-emerald-500 rounded-full cursor-nw-resize" onPointerDown={(e) => startResize(ann.id, e, "nw")} />
-                              <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-emerald-500 rounded-full cursor-ne-resize" onPointerDown={(e) => startResize(ann.id, e, "ne")} />
-                              <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-emerald-500 rounded-full cursor-sw-resize" onPointerDown={(e) => startResize(ann.id, e, "sw")} />
-                              <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-emerald-500 rounded-full cursor-se-resize" onPointerDown={(e) => startResize(ann.id, e, "se")} />
-                              {/* Rotate handle */}
-                              <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-4 h-4 bg-emerald-500 text-white rounded-full cursor-crosshair flex items-center justify-center shadow-md" onPointerDown={(e) => startRotate(ann.id, e)}>
-                                 <span className="text-[10px]">↻</span>
-                              </div>
-                              {/* connecting line */}
-                              <div className="absolute -top-4 left-1/2 w-px h-4 bg-emerald-500 pointer-events-none" />
+                              <div className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-blue-400 cursor-nw-resize" onPointerDown={(e) => startResize(ann.id, e, "nw")} />
+                              <div className="absolute left-1/2 -top-1.5 h-3 w-3 -translate-x-1/2 rounded-full bg-blue-400 cursor-n-resize" onPointerDown={(e) => startResize(ann.id, e, "n")} />
+                              <div className="absolute -right-1.5 -top-1.5 h-3 w-3 rounded-full bg-blue-400 cursor-ne-resize" onPointerDown={(e) => startResize(ann.id, e, "ne")} />
+                              <div className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-blue-400 cursor-e-resize" onPointerDown={(e) => startResize(ann.id, e, "e")} />
+                              <div className="absolute -right-1.5 -bottom-1.5 h-3 w-3 rounded-full bg-blue-400 cursor-se-resize" onPointerDown={(e) => startResize(ann.id, e, "se")} />
+                              <div className="absolute left-1/2 -bottom-1.5 h-3 w-3 -translate-x-1/2 rounded-full bg-blue-400 cursor-s-resize" onPointerDown={(e) => startResize(ann.id, e, "s")} />
+                              <div className="absolute -left-1.5 -bottom-1.5 h-3 w-3 rounded-full bg-blue-400 cursor-sw-resize" onPointerDown={(e) => startResize(ann.id, e, "sw")} />
+                              <div className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-blue-400 cursor-w-resize" onPointerDown={(e) => startResize(ann.id, e, "w")} />
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); deleteAnnotation(ann.id); }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                className="absolute left-1/2 top-[calc(100%+14px)] z-20 flex h-12 w-14 -translate-x-1/2 items-center justify-center rounded bg-[#001b53] text-xl text-white shadow-lg"
+                                aria-label="Delete annotation"
+                              >
+                                🗑
+                              </button>
+                              <button
+                                type="button"
+                                onPointerDown={(e) => startRotate(ann.id, e)}
+                                className="absolute left-[calc(100%+48px)] top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border-2 border-blue-400 bg-white text-lg text-blue-500 shadow-sm"
+                                aria-label="Rotate annotation"
+                              >
+                                ↻
+                              </button>
                             </>
                           )}
                         </div>
@@ -799,8 +852,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                   </div>
                 </div>
 
-                {/* Page thumbnails w/ Reorder */}
-                <div className="mt-4 flex gap-3 overflow-x-auto pb-4 w-full px-2 items-center">
+                <div className="mt-4 flex gap-3 overflow-x-auto pb-4 w-full px-2 items-center md:hidden">
                   {pages.map((pg, i) => (
                     <div key={pg.id} className="flex flex-col gap-1 items-center">
                        <button type="button" onClick={() => { setCurrentPage(i); setSelectedId(null); }}
@@ -820,26 +872,8 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                 </div>
               </>
             )}
+            </div>
           </div>
-
-        {/* Sidebar */}
-        <div className="border-t border-slate-200 lg:border-l lg:border-t-0 overflow-y-auto h-full bg-white relative">
-          <AdvancedToolbar
-            activeTool={activeTool} setActiveTool={setActiveTool}
-            onRotatePage={rotatePage} onDeletePage={deletePage}
-            onAddPageNumbers={addPageNumbers} onDownload={exportPdf}
-            onUpload={() => fileInputRef.current?.click()}
-            isExporting={isExporting} hasPages={pages.length > 0}
-            pageCount={pages.length} currentPage={currentPage}
-            annotations={annotations} onDeleteAnnotation={deleteAnnotation}
-            onUpdateAnnotation={(id, updates) => {
-              updateAnnotation(id, updates);
-              commitAnnotationEdits();
-            }}
-            selectedAnnotationId={selectedId}
-            canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo}
-          />
-        </div>
       </div>
       )}
     </div>

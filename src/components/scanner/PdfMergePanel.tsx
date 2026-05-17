@@ -93,8 +93,7 @@ export default function PdfMergePanel({
       <div className="panel p-5">
         <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Merge PDFs</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-950">Combine PDF documents</h2>
+            <h2 className="text-xl font-semibold text-slate-950">Merge PDFs</h2>
           </div>
           <button
             type="button"
@@ -116,10 +115,7 @@ export default function PdfMergePanel({
               onDrop={handleDrop}
               className="flex min-h-72 w-full flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center transition hover:border-slate-400 hover:bg-white"
             >
-              <span className="text-base font-semibold text-slate-950">Drop a file here</span>
-              <span className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                or click to choose PDFs. Files are merged locally in your browser.
-              </span>
+              <span className="text-base font-semibold text-slate-950">Drop or choose PDFs</span>
             </button>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -208,7 +204,7 @@ export default function PdfMergePanel({
       </div>
 
       <aside className="panel h-fit p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Output</p>
+        <p className="text-base font-semibold text-slate-950">Output</p>
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="text-slate-500">Files</p>
@@ -227,7 +223,6 @@ export default function PdfMergePanel({
         >
           Merge PDFs
         </button>
-        <p className="mt-3 text-sm leading-6 text-slate-500">Use the order controls before exporting. The final PDF keeps each source document&apos;s original page size.</p>
       </aside>
     </section>
   );

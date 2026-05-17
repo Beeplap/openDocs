@@ -23,8 +23,6 @@ export default function ExportPanel({
   previewOrderedItems,
   mergePreviewUrls,
   isGeneratingPreview,
-  isProcessing,
-  statusMessage,
   exportPdf,
   openPdfPageEditor,
 }: Props) {
@@ -32,8 +30,7 @@ export default function ExportPanel({
     <div className="panel p-5">
       <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Export</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-950">Build scan PDF</h2>
+          <h2 className="text-xl font-semibold text-slate-950">Export</h2>
         </div>
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">{pdfOrderItems.length} pages</div>
       </div>
@@ -41,8 +38,7 @@ export default function ExportPanel({
       <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Layout</p>
-            <h3 className="mt-1 text-base font-semibold text-slate-950">A4 PDF from selected scans</h3>
+            <h3 className="text-base font-semibold text-slate-950">Layout</h3>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
@@ -82,11 +78,8 @@ export default function ExportPanel({
 
         <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
           <p className="text-sm font-semibold text-slate-800">Preview</p>
-          {pdfOrderItems.length > 0 ? (
-            <p className="mt-2 text-sm text-slate-500">Open a preview page to adjust image placement, crop, rotation, and scanner filters on the A4 sheet.</p>
-          ) : null}
           {pdfOrderItems.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">Select images to preview merged A4 output.</p>
+            <p className="mt-2 text-sm text-slate-500">No pages selected.</p>
           ) : isGeneratingPreview ? (
             <p className="mt-2 text-sm text-slate-500">Rendering preview...</p>
           ) : (
@@ -155,11 +148,6 @@ export default function ExportPanel({
             </div>
           )}
         </div>
-      </div>
-
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        <p className="font-semibold text-slate-800">{isProcessing ? "Working..." : "Status"}</p>
-        <p className="mt-1 leading-6">{isProcessing ? "Processing files..." : statusMessage}</p>
       </div>
     </div>
   );

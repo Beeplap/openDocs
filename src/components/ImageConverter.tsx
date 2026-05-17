@@ -189,9 +189,7 @@ export default function ImageConverter() {
   return (
     <section className="panel p-5">
       <div className="border-b border-slate-200 pb-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">File Optimizer</p>
-        <h2 className="mt-1 text-xl font-semibold text-slate-950">Convert or compress images and PDFs</h2>
-        <p className="mt-1 text-sm text-slate-500">Use the same format to compress, or choose a different format to convert.</p>
+        <h2 className="text-xl font-semibold text-slate-950">Convert files</h2>
       </div>
 
       <div className="mt-4 space-y-4">
@@ -263,11 +261,6 @@ export default function ImageConverter() {
               </div>
             </label>
 
-            {outputFormat === "image/png" ? (
-              <p className="mt-3 text-sm text-slate-500">
-                PNG is lossless, so the browser keeps visual quality and may not shrink it as much as JPG, WEBP, or PDF.
-              </p>
-            ) : null}
             {warning ? <p className="mt-3 text-sm font-medium text-amber-700">{warning}</p> : null}
 
             <button
@@ -281,10 +274,7 @@ export default function ImageConverter() {
           </div>
         ) : null}
 
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-          <p className="font-semibold text-slate-800">Status</p>
-          <p className="mt-1">{status}</p>
-        </div>
+        {file ? <p className="text-sm text-slate-500">{status}</p> : null}
       </div>
     </section>
   );

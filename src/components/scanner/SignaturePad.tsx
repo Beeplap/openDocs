@@ -164,8 +164,7 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 flex-shrink-0">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">Digital Signature</p>
-            <h2 className="mt-0.5 text-lg font-semibold text-slate-900">Draw your signature</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Signature</h2>
           </div>
           <button
             type="button"
@@ -255,11 +254,8 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 flex-shrink-0">
-          <p className="text-xs text-slate-400 hidden sm:block">
-            {isMobileLandscape ? "Rotated to landscape for easier signing" : "Use mouse, touch, or stylus to sign"}
-          </p>
-          <div className="flex items-center gap-3 ml-auto">
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-5 py-4 flex-shrink-0">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onClose}

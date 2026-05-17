@@ -45,81 +45,77 @@ const fontOptions = [
 export default function AdvancedToolbar({
   activeTool, setActiveTool, onRotatePage, onDeletePage,
   onAddPageNumbers, onDownload, onUpload, isExporting,
-  hasPages, pageCount, currentPage, annotations, onDeleteAnnotation, selectedAnnotationId,
+  hasPages, pageCount, annotations, onDeleteAnnotation, selectedAnnotationId,
   canUndo, canRedo, undo, redo, onUpdateAnnotation
 }: Props) {
-  const pageAnnotations = annotations.filter((a) => a.pageIndex === currentPage);
   const selectedAnn = annotations.find((a) => a.id === selectedAnnotationId);
 
+  if (!hasPages) {
+    return (
+      <div className="flex items-center justify-center p-3">
+        <button type="button" onClick={onUpload}
+          className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition">
+          Upload PDF
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-5">
-      {/* Upload */}
-      <button type="button" onClick={onUpload}
-        className="w-full rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition">
-        {hasPages ? "Upload New PDF" : "Upload PDF to Edit"}
-      </button>
+    <div className="flex min-h-16 items-center justify-center border-b border-blue-100 bg-slate-50/95 px-3 py-2">
+      <div className="flex max-w-full items-center overflow-x-auto rounded-sm border border-blue-200 bg-white text-slate-900 shadow-[0_2px_8px_rgba(37,99,235,0.2)]">
+        <div className="flex items-center">
+          {tools.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTool(t.id)}
+              title={t.label}
+              className={`flex h-10 min-w-10 items-center justify-center border-r border-slate-200 px-3 text-sm font-semibold transition ${
+                activeTool === t.id ? "bg-blue-50 text-blue-600" : "bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              {t.id === "text" ? "T" : t.icon}
+            </button>
+          ))}
+        </div>
 
-      {hasPages && (
-        <>
-          {/* Tools */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Tools</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {tools.map((t) => (
-                <button key={t.id} type="button" onClick={() => setActiveTool(t.id)}
-                  className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
-                    activeTool === t.id
-                      ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300"
-                      : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
-                  }`}>
-                  <span className="text-base">{t.icon}</span> {t.label}
-                </button>
-              ))}
-            </div>
-            {undo && redo && (
-              <div className="hidden lg:grid grid-cols-2 gap-1.5 mt-2">
-                 <button type="button" onClick={undo} disabled={!canUndo} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
-                    ↶ Undo
-                 </button>
-                 <button type="button" onClick={redo} disabled={!canRedo} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition">
-                    ↷ Redo
-                 </button>
-              </div>
-            )}
-          </div>
+        <div className="flex items-center border-r border-slate-200">
+          <button type="button" onClick={undo} disabled={!canUndo} title="Undo"
+            className="flex h-10 w-10 items-center justify-center text-sm text-slate-700 hover:bg-slate-50 disabled:text-slate-300">
+            ↶
+          </button>
+          <button type="button" onClick={redo} disabled={!canRedo} title="Redo"
+            className="flex h-10 w-10 items-center justify-center text-sm text-slate-700 hover:bg-slate-50 disabled:text-slate-300">
+            ↷
+          </button>
+        </div>
 
-          {/* Page actions */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Page Actions</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button type="button" onClick={() => onRotatePage(-1)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
-                ↶ Rotate Left
-              </button>
-              <button type="button" onClick={() => onRotatePage(1)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
-                ↷ Rotate Right
-              </button>
-              <button type="button" onClick={onDeletePage} disabled={pageCount <= 1}
-                className="rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 transition">
-                🗑 Delete Page
-              </button>
-              <button type="button" onClick={onAddPageNumbers}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
-                # Page Numbers
-              </button>
-            </div>
-          </div>
+        <div className="flex items-center border-r border-slate-200">
+          <button type="button" onClick={() => onRotatePage(-1)} title="Rotate left"
+            className="flex h-10 w-10 items-center justify-center text-sm text-slate-700 hover:bg-slate-50">
+            ↶
+          </button>
+          <button type="button" onClick={() => onRotatePage(1)} title="Rotate right"
+            className="flex h-10 w-10 items-center justify-center text-sm text-slate-700 hover:bg-slate-50">
+            ↷
+          </button>
+          <button type="button" onClick={onDeletePage} disabled={pageCount <= 1} title="Delete page"
+            className="flex h-10 w-10 items-center justify-center text-sm text-red-600 hover:bg-red-50 disabled:text-slate-300">
+            🗑
+          </button>
+          <button type="button" onClick={onAddPageNumbers} title="Page numbers"
+            className="flex h-10 min-w-10 items-center justify-center px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            #
+          </button>
+        </div>
 
-          {/* Text Formatting */}
-          {selectedAnn && selectedAnn.kind === "text" && onUpdateAnnotation && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Text Formatting</p>
-              <div className="flex flex-wrap gap-2 items-center bg-white rounded-xl border border-slate-200 p-2">
+        {selectedAnn && selectedAnn.kind === "text" && onUpdateAnnotation && (
+          <div className="flex items-center">
                 <select
                   value={selectedAnn.fontFamily || fontOptions[0].value}
                   onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontFamily: e.target.value })}
-                  className="min-w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-500"
+              className="h-10 min-w-48 border-r border-slate-200 bg-white px-4 text-center text-sm outline-none"
                   aria-label="Font family"
                 >
                   {fontOptions.map((font) => (
@@ -128,88 +124,64 @@ export default function AdvancedToolbar({
                     </option>
                   ))}
                 </select>
-                <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { bold: !selectedAnn.bold })}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg font-serif font-bold transition ${selectedAnn.bold ? "bg-emerald-100 text-emerald-800" : "text-slate-600 hover:bg-slate-100"}`}>
-                  B
-                </button>
-                <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { italic: !selectedAnn.italic })}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg font-serif italic transition ${selectedAnn.italic ? "bg-emerald-100 text-emerald-800" : "text-slate-600 hover:bg-slate-100"}`}>
-                  I
-                </button>
-                <div className="w-px h-6 bg-slate-200 mx-1" />
-                <input type="number" min="8" max="120" value={selectedAnn.fontSize || 16}
+            <input type="number" min="8" max="120" value={selectedAnn.fontSize || 16}
                   onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontSize: parseInt(e.target.value) || 16 })}
-                  className="w-14 rounded-lg border border-slate-200 px-2 py-1 text-sm text-center outline-none focus:border-emerald-500" />
-                <span className="text-xs text-slate-400">px</span>
-                <div className="w-px h-6 bg-slate-200 mx-1" />
-                <input type="color" value={selectedAnn.color || "#1e293b"}
+              className="h-10 w-16 border-r border-slate-200 bg-white px-2 text-center text-sm outline-none" />
+            <label className="flex h-10 w-14 items-center justify-center border-r border-slate-200">
+              <span className="h-5 w-5 rounded-full border border-slate-200" style={{ backgroundColor: selectedAnn.color || "#1e293b" }} />
+              <input type="color" value={selectedAnn.color || "#1e293b"}
                   onChange={(e) => onUpdateAnnotation(selectedAnn.id, { color: e.target.value })}
-                  className="h-7 w-7 cursor-pointer rounded-full border-0 p-0" />
-              </div>
-            </div>
-          )}
+                className="sr-only" />
+            </label>
+            <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { bold: !selectedAnn.bold })}
+              className={`flex h-10 w-12 items-center justify-center border-r border-slate-200 text-lg font-bold ${selectedAnn.bold ? "bg-blue-50 text-blue-600" : "hover:bg-slate-50"}`}>
+              B
+            </button>
+            <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { italic: !selectedAnn.italic })}
+              className={`flex h-10 w-12 items-center justify-center border-r border-slate-200 font-serif text-lg italic ${selectedAnn.italic ? "bg-blue-50 text-blue-600" : "hover:bg-slate-50"}`}>
+              I
+            </button>
+          </div>
+        )}
 
-          {/* Signature Formatting */}
-          {selectedAnn && selectedAnn.kind === "signature" && onUpdateAnnotation && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Signature Style</p>
-              <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3">
-                <label className="flex items-center justify-between gap-3 text-xs font-semibold text-slate-600">
-                  Color
-                  <input
-                    type="color"
-                    value={selectedAnn.color || "#1a1a2e"}
-                    onChange={(e) => onUpdateAnnotation(selectedAnn.id, { color: e.target.value })}
-                    className="h-8 w-10 cursor-pointer rounded-lg border border-slate-200 bg-white p-0"
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-semibold text-slate-600">
-                  Line size
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="range"
-                      min={1}
-                      max={12}
-                      step={0.5}
-                      value={selectedAnn.strokeWidth || 3}
-                      onChange={(e) => onUpdateAnnotation(selectedAnn.id, { strokeWidth: parseFloat(e.target.value) || 3 })}
-                      className="w-full accent-emerald-600"
-                    />
-                    <span className="w-8 text-right text-xs text-slate-400">{selectedAnn.strokeWidth || 3}</span>
-                  </div>
-                </label>
-              </div>
-            </div>
-          )}
+        {selectedAnn && selectedAnn.kind === "signature" && onUpdateAnnotation && (
+          <div className="flex items-center">
+            <label className="flex h-10 w-14 items-center justify-center border-r border-slate-200">
+              <span className="h-5 w-5 rounded-full border border-slate-200" style={{ backgroundColor: selectedAnn.color || "#1a1a2e" }} />
+              <input type="color" value={selectedAnn.color || "#1a1a2e"}
+                onChange={(e) => onUpdateAnnotation(selectedAnn.id, { color: e.target.value })}
+                className="sr-only" />
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={12}
+              step={0.5}
+              value={selectedAnn.strokeWidth || 3}
+              onChange={(e) => onUpdateAnnotation(selectedAnn.id, { strokeWidth: parseFloat(e.target.value) || 3 })}
+              className="h-10 w-16 border-r border-slate-200 bg-white px-2 text-center text-sm outline-none"
+              aria-label="Signature line size"
+            />
+          </div>
+        )}
 
-          {/* Annotations list */}
-          {pageAnnotations.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">
-                Annotations ({pageAnnotations.length})
-              </p>
-              <div className="space-y-1 max-h-40 overflow-y-auto">
-                {pageAnnotations.map((a) => (
-                  <div key={a.id}
-                    className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-xs ${
-                      selectedAnnotationId === a.id ? "bg-emerald-100 text-emerald-800" : "bg-slate-50 text-slate-600"
-                    }`}>
-                    <span className="capitalize">{a.kind}</span>
-                    <button type="button" onClick={() => onDeleteAnnotation(a.id)}
-                      className="text-red-400 hover:text-red-600 transition">✕</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Download */}
-          <button type="button" onClick={onDownload} disabled={isExporting}
-            className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition">
-            {isExporting ? "Exporting..." : "Download PDF"}
+        {selectedAnnotationId && (
+          <button type="button" onClick={() => onDeleteAnnotation(selectedAnnotationId)}
+            className="flex h-10 w-10 items-center justify-center border-r border-slate-200 text-red-600 hover:bg-red-50"
+            title="Delete annotation">
+            🗑
           </button>
-        </>
-      )}
+        )}
+
+        <button type="button" onClick={onUpload}
+          className="flex h-10 items-center justify-center border-r border-slate-200 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-50">
+          Add
+        </button>
+        <button type="button" onClick={onDownload} disabled={isExporting}
+          className="flex h-10 items-center justify-center px-4 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:text-slate-300">
+          {isExporting ? "Exporting" : "Download"}
+        </button>
+      </div>
     </div>
   );
 }

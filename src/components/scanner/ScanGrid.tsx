@@ -110,21 +110,10 @@ export default function ScanGrid({
       <div className="border-b border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Scan pages</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-950">Organize editable pages</h2>
-            <p className="mt-1 text-sm text-slate-500">Page tray and edit controls.</p>
+            <h2 className="text-xl font-semibold text-slate-950">Pages</h2>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-center sm:min-w-44">
-              <div className="border-r border-slate-200 px-3 py-2">
-                <p className="text-base font-semibold text-slate-950">{items.length}</p>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Added</p>
-              </div>
-              <div className="px-3 py-2">
-                <p className="text-base font-semibold text-slate-950">{pdfOrderIds.length}</p>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">In PDF</p>
-              </div>
-            </div>
+            <span className="text-sm font-semibold text-slate-500">{pdfOrderIds.length}/{items.length}</span>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -162,7 +151,7 @@ export default function ScanGrid({
               <UploadIcon />
             </div>
             <h3 className="mt-4 text-base font-semibold text-slate-950">No pages yet</h3>
-            <span className="mt-2 text-sm text-slate-500">Drop a file here, choose files, or open phone gallery.</span>
+            <span className="mt-2 text-sm text-slate-500">Drop or choose files.</span>
           </button>
         ) : (
           displayItems.map((item) => {

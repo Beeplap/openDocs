@@ -946,9 +946,7 @@ export default function Home() {
           <header className="panel overflow-hidden">
             <div className="flex flex-col gap-4 border-b border-slate-200 bg-white p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Document Workspace</p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">OpenDocs</h1>
-                <p className="mt-1 text-sm text-slate-500">Ready for the next document.</p>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -1064,44 +1062,6 @@ export default function Home() {
                     </button>
                   </div>
                 ) : null}
-              </div>
-            </div>
-            <div className="grid gap-3 bg-slate-50/70 p-4 text-sm sm:grid-cols-3 sm:p-5">
-              <div>
-                <p className="font-semibold text-slate-950">
-                  {workspaceMode === "scan"
-                    ? "Scan workspace"
-                    : workspaceMode === "pdf"
-                      ? "PDF merge workspace"
-                      : workspaceMode === "advanced"
-                        ? "Advanced PDF editor"
-                        : "Conversion workspace"}
-                </p>
-                <p className="mt-1 text-slate-500">
-                  {workspaceMode === "scan"
-                    ? `${items.length} pages loaded`
-                    : workspaceMode === "pdf"
-                      ? `${pdfFiles.length} PDFs loaded`
-                      : workspaceMode === "advanced"
-                        ? "Edit, annotate, sign & export PDFs"
-                        : "Client-side compression and conversion ready"}
-                </p>
-              </div>
-              <div>
-                <p className="font-semibold text-slate-950">Selection</p>
-                <p className="mt-1 text-slate-500">
-                  {workspaceMode === "scan"
-                    ? `${pdfOrderIds.length} pages in PDF`
-                    : workspaceMode === "pdf"
-                      ? `${pdfFiles.length} files in order`
-                      : workspaceMode === "advanced"
-                        ? "Text, highlight, signature"
-                        : "Single file optimize"}
-                </p>
-              </div>
-              <div>
-                <p className="font-semibold text-slate-950">Status</p>
-                <p className="mt-1 truncate text-slate-500">{isProcessing ? "Working..." : statusMessage}</p>
               </div>
             </div>
           </header>

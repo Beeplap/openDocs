@@ -17,8 +17,7 @@ export default function CameraModal({ open, videoRef, cameraError, cameraReady, 
       <div className="w-full max-w-4xl overflow-hidden rounded-xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Live Scanner</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-900">Camera permission powered capture</h2>
+            <h2 className="text-xl font-semibold text-slate-900">Camera</h2>
           </div>
           <button onClick={closeCamera} className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-600">
             Close
@@ -36,9 +35,7 @@ export default function CameraModal({ open, videoRef, cameraError, cameraReady, 
             </div>
           </div>
           <div className="space-y-4 p-5">
-            <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
-              {cameraError ? cameraError : "On mobile, this opens the rear camera when supported. On desktop, use your webcam to capture documents."}
-            </div>
+            {cameraError ? <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">{cameraError}</div> : null}
             <button
               onClick={() => void captureFrame()}
               disabled={!cameraReady}
