@@ -156,7 +156,7 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 flex-shrink-0">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600">Digital Signature</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">Digital Signature</p>
             <h2 className="mt-0.5 text-lg font-semibold text-slate-900">Draw your signature</h2>
           </div>
           <button
@@ -207,7 +207,7 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
               step={0.5}
               value={penSize}
               onChange={(e) => setPenSize(parseFloat(e.target.value))}
-              className="w-24 accent-violet-600"
+              className="w-24 accent-emerald-600"
             />
             <span className="text-xs text-slate-500 w-5">{penSize}</span>
           </div>
@@ -232,7 +232,7 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
             )}
           </div>
           {/* Baseline guides */}
-          <div className="absolute left-6 right-6 bottom-12 border-b-2 border-dashed border-violet-200 pointer-events-none" />
+          <div className="absolute left-6 right-6 bottom-12 border-b-2 border-dashed border-emerald-200 pointer-events-none" />
           <canvas
             ref={canvasRef}
             width={800}
@@ -263,7 +263,7 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
               type="button"
               disabled={!hasStrokes}
               onClick={handleApply}
-              className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
             >
               Apply Signature
             </button>

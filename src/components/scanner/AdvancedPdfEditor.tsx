@@ -283,7 +283,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       }
       const pdfBytes = await buildAnnotatedPdf(canvases);
       canvases.forEach((c) => c.remove());
-      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const blob = new Blob([Uint8Array.from(pdfBytes)], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = "opendocs-edited.pdf"; a.click();
@@ -311,7 +311,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
               <button type="button" onClick={() => { setShowWatermarkDialog(false); setWatermarkText(""); }}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
               <button type="button" onClick={handleWatermarkApply} disabled={!watermarkText.trim()}
-                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-40">Apply</button>
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">Apply</button>
             </div>
           </div>
         </div>
@@ -326,7 +326,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
             <div className="flex h-64 flex-col items-center justify-center gap-4">
               <p className="text-sm text-slate-500">Upload a PDF to start editing</p>
               <button type="button" onClick={() => fileInputRef.current?.click()}
-                className="rounded-2xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white hover:bg-violet-700 transition">
+                className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 transition">
                 Choose PDF File
               </button>
             </div>
@@ -359,7 +359,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                       <input type="text" autoFocus value={textInput.text} onChange={(e) => setTextInput((t) => t ? { ...t, text: e.target.value } : null)}
                         onKeyDown={(e) => { if (e.key === "Enter") commitTextInput(); if (e.key === "Escape") setTextInput(null); }}
                         onBlur={commitTextInput}
-                        className="rounded-lg border-2 border-violet-400 bg-white px-2 py-1 text-sm shadow-lg outline-none min-w-[120px]"
+                        className="rounded-lg border-2 border-emerald-400 bg-white px-2 py-1 text-sm shadow-lg outline-none min-w-[120px]"
                         placeholder="Type text..." />
                     </div>
                   )}
@@ -368,7 +368,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                   {annotations.filter((a) => a.pageIndex === currentPage).map((ann) => {
                     if (ann.kind === "text") {
                       return (
-                        <div key={ann.id} className={`absolute select-none cursor-move ${selectedId === ann.id ? "ring-2 ring-violet-500 rounded" : ""}`}
+                        <div key={ann.id} className={`absolute select-none cursor-move ${selectedId === ann.id ? "ring-2 ring-emerald-500 rounded" : ""}`}
                           style={{ left: `${ann.x * 100}%`, top: `${ann.y * 100}%`, transform: "translate(-50%, -50%)",
                             fontSize: `${ann.fontSize}px`, color: ann.color,
                             fontWeight: ann.bold ? "bold" : "normal", fontStyle: ann.italic ? "italic" : "normal" }}
@@ -379,7 +379,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                     }
                     if (ann.kind === "highlight") {
                       return (
-                        <div key={ann.id} className={`absolute cursor-move ${selectedId === ann.id ? "ring-2 ring-violet-500" : ""}`}
+                        <div key={ann.id} className={`absolute cursor-move ${selectedId === ann.id ? "ring-2 ring-emerald-500" : ""}`}
                           style={{ left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
                             width: `${ann.w * 100}%`, height: `${ann.h * 100}%`,
                             backgroundColor: ann.color, opacity: ann.opacity }}
@@ -389,13 +389,13 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                     if (ann.kind === "signature") {
                       const isSelected = selectedId === ann.id;
                       return (
-                        <div key={ann.id} className={`absolute cursor-move ${isSelected ? "ring-2 ring-violet-500" : ""}`}
+                        <div key={ann.id} className={`absolute cursor-move ${isSelected ? "ring-2 ring-emerald-500" : ""}`}
                           style={{ left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
                             width: `${ann.w * 100}%`, height: `${ann.h * 100}%`, opacity: ann.opacity }}
                           onPointerDown={(e) => startDrag(ann.id, e)}>
                           <img src={ann.dataUrl} alt="Signature" className="h-full w-full object-contain pointer-events-none" draggable={false} />
                           {isSelected && (
-                            <div className="absolute -bottom-2 -right-2 h-5 w-5 rounded-full bg-violet-500 border-2 border-white cursor-se-resize shadow-lg"
+                            <div className="absolute -bottom-2 -right-2 h-5 w-5 rounded-full bg-emerald-500 border-2 border-white cursor-se-resize shadow-lg"
                               onPointerDown={(e) => startResize(ann.id, e)} />
                           )}
                         </div>
@@ -411,7 +411,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                 {pages.map((pg, i) => (
                   <button key={i} type="button" onClick={() => { setCurrentPage(i); setSelectedId(null); }}
                     className={`flex-shrink-0 rounded-xl overflow-hidden border-2 transition ${
-                      i === currentPage ? "border-violet-500 shadow-md" : "border-slate-200 hover:border-slate-300"
+                      i === currentPage ? "border-emerald-500 shadow-md" : "border-slate-200 hover:border-slate-300"
                     }`} style={{ width: 64, height: 80 }}>
                     <img src={pg.dataUrl} alt={`Page ${i + 1}`} className="h-full w-full object-cover"
                       style={{ transform: `rotate(${pg.rotation}deg)` }} draggable={false} />

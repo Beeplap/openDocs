@@ -40,7 +40,7 @@ export default function AdvancedToolbar({
     <div className="flex flex-col gap-4 p-4 sm:p-5">
       {/* Upload */}
       <button type="button" onClick={onUpload}
-        className="w-full rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700 hover:bg-violet-100 transition">
+        className="w-full rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition">
         {hasPages ? "Upload New PDF" : "Upload PDF to Edit"}
       </button>
 
@@ -54,7 +54,7 @@ export default function AdvancedToolbar({
                 <button key={t.id} type="button" onClick={() => setActiveTool(t.id)}
                   className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
                     activeTool === t.id
-                      ? "bg-violet-100 text-violet-800 ring-1 ring-violet-300"
+                      ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300"
                       : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
                   }`}>
                   <span className="text-base">{t.icon}</span> {t.label}
@@ -96,7 +96,7 @@ export default function AdvancedToolbar({
                 {pageAnnotations.map((a) => (
                   <div key={a.id}
                     className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-xs ${
-                      selectedAnnotationId === a.id ? "bg-violet-100 text-violet-800" : "bg-slate-50 text-slate-600"
+                      selectedAnnotationId === a.id ? "bg-emerald-100 text-emerald-800" : "bg-slate-50 text-slate-600"
                     }`}>
                     <span className="capitalize">{a.kind}</span>
                     <button type="button" onClick={() => onDeleteAnnotation(a.id)}
@@ -109,7 +109,7 @@ export default function AdvancedToolbar({
 
           {/* Download */}
           <button type="button" onClick={onDownload} disabled={isExporting}
-            className="w-full rounded-2xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 transition">
+            className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition">
             {isExporting ? "Exporting..." : "Download PDF"}
           </button>
         </>
