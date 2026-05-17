@@ -1,5 +1,21 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import SignaturePad from "./SignaturePad";
 import AdvancedToolbar from "./AdvancedToolbar";
 import type { Tool } from "./AdvancedToolbar";
@@ -34,8 +50,6 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   const [contextMenu, setContextMenu] = useState<AnnotationContextMenu | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [draggingPageIndex, setDraggingPageIndex] = useState<number | null>(null);
-  const [dragOverPageIndex, setDragOverPageIndex] = useState<number | null>(null);
   
   const [dragState, setDragState] = useState<{id:string;startX:number;startY:number;origX:number;origY:number}|null>(null);
   const [resizeState, setResizeState] = useState<{id:string;startX:number;startY:number;origW:number;origH:number;origX:number;origY:number;handle:string}|null>(null);
@@ -47,6 +61,10 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   
   const pageRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pageSortSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor)
+  );
 
   const pushState = useCallback((newAnns: AdvancedAnnotation[], newPgs: PageData[]) => {
     setHistory((prev) => {
@@ -231,33 +249,15 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     setCurrentPage(oldToNew.get(currentPage) ?? toIndex);
     setSelectedId(null);
     setEditingTextId(null);
+    setContextMenu(null);
   }
 
-  function handlePageDragStart(index: number, e: React.DragEvent<HTMLElement>) {
-    setDraggingPageIndex(index);
-    setDragOverPageIndex(index);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", String(index));
-  }
-
-  function handlePageDragOver(index: number, e: React.DragEvent<HTMLElement>) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverPageIndex(index);
-  }
-
-  function handlePageDrop(index: number, e: React.DragEvent<HTMLElement>) {
-    e.preventDefault();
-    const fromIndex = draggingPageIndex ?? Number(e.dataTransfer.getData("text/plain"));
-    setDraggingPageIndex(null);
-    setDragOverPageIndex(null);
-    if (!Number.isInteger(fromIndex)) return;
-    movePageToIndex(fromIndex, index);
-  }
-
-  function handlePageDragEnd() {
-    setDraggingPageIndex(null);
-    setDragOverPageIndex(null);
+  function handlePageSortEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromIndex = pages.findIndex((pg) => pg.id === active.id);
+    const toIndex = pages.findIndex((pg) => pg.id === over.id);
+    movePageToIndex(fromIndex, toIndex);
   }
 
   function addPageNumbers() {
@@ -718,40 +718,21 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
         <div className="flex flex-1 overflow-hidden bg-slate-100">
           <aside className="hidden w-48 shrink-0 overflow-y-auto border-r border-blue-100 bg-blue-50/70 p-4 md:block">
             <div className="flex flex-col items-center gap-4">
-              {pages.map((pg, i) => (
-                <div
-                  key={pg.id}
-                  className={`flex flex-col items-center gap-2 transition ${
-                    draggingPageIndex === i ? "opacity-45" : "opacity-100"
-                  }`}
-                  draggable
-                  onDragStart={(e) => handlePageDragStart(i, e)}
-                  onDragOver={(e) => handlePageDragOver(i, e)}
-                  onDrop={(e) => handlePageDrop(i, e)}
-                  onDragEnd={handlePageDragEnd}
-                >
-                  <button
-                    type="button"
-                    onClick={() => { setCurrentPage(i); setSelectedId(null); }}
-                    className={`relative overflow-hidden bg-white shadow-sm transition ${
-                      i === currentPage
-                        ? "ring-2 ring-blue-500"
-                        : dragOverPageIndex === i
-                          ? "ring-2 ring-blue-300"
-                          : "ring-1 ring-slate-200 hover:ring-blue-300"
-                    }`}
-                    style={{ width: 112, height: 146 }}
-                  >
-                    <img src={pg.dataUrl} alt={`Page ${i + 1}`} className="h-full w-full object-cover"
-                      style={{ transform: `rotate(${pg.rotation}deg)` }} draggable={false} />
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => reorderPage(-1, i)} disabled={i === 0} className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-slate-500 shadow-sm ring-1 ring-slate-200 hover:text-blue-600 disabled:opacity-30">‹</button>
-                    <span className="text-sm font-semibold text-slate-900">{i + 1}</span>
-                    <button type="button" onClick={() => reorderPage(1, i)} disabled={i === pages.length - 1} className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-slate-500 shadow-sm ring-1 ring-slate-200 hover:text-blue-600 disabled:opacity-30">›</button>
-                  </div>
-                </div>
-              ))}
+              <DndContext sensors={pageSortSensors} collisionDetection={closestCenter} onDragEnd={handlePageSortEnd}>
+                <SortableContext items={pages.map((pg) => pg.id)} strategy={verticalListSortingStrategy}>
+                  {pages.map((pg, i) => (
+                    <SortablePageThumbnail
+                      key={pg.id}
+                      page={pg}
+                      index={i}
+                      currentPage={currentPage}
+                      pageCount={pages.length}
+                      onSelect={() => { setCurrentPage(i); setSelectedId(null); }}
+                      onMove={reorderPage}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
 
               <button
                 type="button"
@@ -936,30 +917,22 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                 </div>
 
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-4 w-full px-2 items-center md:hidden">
-                  {pages.map((pg, i) => (
-                    <div
-                      key={pg.id}
-                      className={`flex flex-col gap-1 items-center transition ${draggingPageIndex === i ? "opacity-45" : "opacity-100"}`}
-                      draggable
-                      onDragStart={(e) => handlePageDragStart(i, e)}
-                      onDragOver={(e) => handlePageDragOver(i, e)}
-                      onDrop={(e) => handlePageDrop(i, e)}
-                      onDragEnd={handlePageDragEnd}
-                    >
-                       <button type="button" onClick={() => { setCurrentPage(i); setSelectedId(null); }}
-                         className={`flex-shrink-0 rounded-xl overflow-hidden border-2 transition ${
-                           i === currentPage ? "border-blue-500 shadow-md scale-105" : dragOverPageIndex === i ? "border-blue-300" : "border-slate-200 hover:border-slate-300"
-                         }`} style={{ width: 72, height: 90 }}>
-                         <img src={pg.dataUrl} alt={`Page ${i + 1}`} className="h-full w-full object-cover"
-                           style={{ transform: `rotate(${pg.rotation}deg)` }} draggable={false} />
-                       </button>
-                       <div className="flex items-center gap-1 bg-white rounded-full shadow-sm border border-slate-200 px-1">
-                          <button type="button" onClick={() => reorderPage(-1, i)} disabled={i === 0} className="p-1 text-slate-400 hover:text-emerald-600 disabled:opacity-30">◀</button>
-                          <span className="text-[10px] font-semibold text-slate-500">{i + 1}</span>
-                          <button type="button" onClick={() => reorderPage(1, i)} disabled={i === pages.length - 1} className="p-1 text-slate-400 hover:text-emerald-600 disabled:opacity-30">▶</button>
-                       </div>
-                    </div>
-                  ))}
+                  <DndContext sensors={pageSortSensors} collisionDetection={closestCenter} onDragEnd={handlePageSortEnd}>
+                    <SortableContext items={pages.map((pg) => pg.id)} strategy={horizontalListSortingStrategy}>
+                      {pages.map((pg, i) => (
+                        <SortablePageThumbnail
+                          key={pg.id}
+                          page={pg}
+                          index={i}
+                          currentPage={currentPage}
+                          pageCount={pages.length}
+                          onSelect={() => { setCurrentPage(i); setSelectedId(null); }}
+                          onMove={reorderPage}
+                          compact
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 </div>
               </>
             )}
@@ -967,6 +940,104 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
           </div>
       </div>
       )}
+    </div>
+  );
+}
+
+function SortablePageThumbnail({
+  page,
+  index,
+  currentPage,
+  pageCount,
+  onSelect,
+  onMove,
+  compact = false,
+}: {
+  page: PageData;
+  index: number;
+  currentPage: number;
+  pageCount: number;
+  onSelect: () => void;
+  onMove: (dir: 1 | -1, idx: number) => void;
+  compact?: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: page.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+  };
+  const active = index === currentPage;
+  const thumbSize = compact ? { width: 72, height: 90 } : { width: 112, height: 146 };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`${compact ? "flex flex-col gap-1" : "flex flex-col gap-2"} items-center transition ${
+        isDragging ? "opacity-60" : "opacity-100"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`relative flex-shrink-0 cursor-grab overflow-hidden bg-white shadow-sm transition active:cursor-grabbing ${
+          compact
+            ? `rounded-xl border-2 ${active ? "scale-105 border-blue-500 shadow-md" : "border-slate-200 hover:border-blue-300"}`
+            : active
+              ? "ring-2 ring-blue-500"
+              : "ring-1 ring-slate-200 hover:ring-blue-300"
+        }`}
+        style={thumbSize}
+        aria-label={`Move or select page ${index + 1}`}
+        {...attributes}
+        {...listeners}
+      >
+        <img
+          src={page.dataUrl}
+          alt={`Page ${index + 1}`}
+          className="h-full w-full object-cover"
+          style={{ transform: `rotate(${page.rotation}deg)` }}
+          draggable={false}
+        />
+      </button>
+      <div
+        className={
+          compact
+            ? "flex items-center gap-1 rounded-full border border-slate-200 bg-white px-1 shadow-sm"
+            : "flex items-center gap-2"
+        }
+      >
+        <button
+          type="button"
+          onClick={() => onMove(-1, index)}
+          disabled={index === 0}
+          className={
+            compact
+              ? "px-1 text-xs text-slate-400 hover:text-blue-600 disabled:opacity-30"
+              : "flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-slate-500 shadow-sm ring-1 ring-slate-200 hover:text-blue-600 disabled:opacity-30"
+          }
+          aria-label={`Move page ${index + 1} up`}
+        >
+          {"<"}
+        </button>
+        <span className={compact ? "text-[10px] font-semibold text-slate-500" : "text-sm font-semibold text-slate-900"}>
+          {index + 1}
+        </span>
+        <button
+          type="button"
+          onClick={() => onMove(1, index)}
+          disabled={index === pageCount - 1}
+          className={
+            compact
+              ? "px-1 text-xs text-slate-400 hover:text-blue-600 disabled:opacity-30"
+              : "flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-slate-500 shadow-sm ring-1 ring-slate-200 hover:text-blue-600 disabled:opacity-30"
+          }
+          aria-label={`Move page ${index + 1} down`}
+        >
+          {">"}
+        </button>
+      </div>
     </div>
   );
 }
