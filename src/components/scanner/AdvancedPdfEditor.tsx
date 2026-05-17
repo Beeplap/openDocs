@@ -77,14 +77,21 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
         if (e.key === "z") { e.preventDefault(); undo(); }
         else if (e.key === "y") { e.preventDefault(); redo(); }
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedId) {
+          e.preventDefault();
+          pushState(annotations.filter((an) => an.id !== selectedId), pages);
+          setSelectedId(null);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undo, redo]);
+  }, [undo, redo, selectedId, annotations, pages, pushState]);
 
   const loadPdf = useCallback(async (f: File) => {
     setIsLoading(true);
@@ -194,12 +201,9 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       return;
     }
     if (activeTool === "select") {
-      // only clear if clicking directly on the container
-      if ((e.target as HTMLElement).tagName.toLowerCase() === "img" || (e.target as HTMLElement).tagName.toLowerCase() === "div") {
-        // verify it's the main container
-        if ((e.target as HTMLElement).draggable === false) {
-          setSelectedId(null);
-        }
+      const target = e.target as HTMLElement;
+      if (!target.closest(".annotation-layer")) {
+        setSelectedId(null);
       }
     }
   }
@@ -520,7 +524,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
             <>
               {/* Page canvas */}
               <div className="w-full max-w-[600px] select-none">
-                <div ref={pageRef} className="relative overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-slate-200"
+                <div ref={pageRef} className="relative overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-slate-200 touch-none"
                   style={{ aspectRatio: page.rotation % 180 !== 0 ? `${page.height}/${page.width}` : `${page.width}/${page.height}` }}
                   onClick={handlePageClick}
                   onPointerDown={handleHighlightDown} onPointerMove={(e) => { handleHighlightMove(e); onDragMove(e); onResizeMove(e); onRotateMove(e); }}
@@ -567,7 +571,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                     if (ann.kind === "watermark") return null;
                     const isSelected = selectedId === ann.id;
                     return (
-                      <div key={ann.id} className={`absolute cursor-move ${isSelected ? "ring-2 ring-emerald-500 bg-emerald-500/10" : ""}`}
+                      <div key={ann.id} className={`annotation-layer absolute cursor-move ${isSelected ? "ring-2 ring-emerald-500 bg-emerald-500/10" : ""}`}
                         style={{
                           left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
                           width: `${ann.w * 100}%`, height: `${ann.h * 100}%`,
