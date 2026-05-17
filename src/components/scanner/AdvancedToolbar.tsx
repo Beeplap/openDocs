@@ -35,11 +35,12 @@ const tools: { id: Tool; label: string; icon: string }[] = [
 ];
 
 const fontOptions = [
-  { label: "Sans", value: "Arial, Helvetica, sans-serif" },
-  { label: "Serif", value: "Georgia, Times New Roman, serif" },
-  { label: "Mono", value: "Courier New, Courier, monospace" },
-  { label: "Rounded", value: "Trebuchet MS, Arial, sans-serif" },
-  { label: "Display", value: "Verdana, Geneva, sans-serif" },
+  { label: "Arial", value: "Arial, Helvetica, sans-serif" },
+  { label: "Roboto", value: "Roboto, Arial, Helvetica, sans-serif" },
+  { label: "Poppins", value: "Poppins, Arial, Helvetica, sans-serif" },
+  { label: "Times New Roman", value: "Times New Roman, Times, serif" },
+  { label: "Calibri", value: "Calibri, Arial, Helvetica, sans-serif" },
+  { label: "Montserrat", value: "Montserrat, Arial, Helvetica, sans-serif" },
 ];
 
 export default function AdvancedToolbar({

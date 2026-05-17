@@ -14,6 +14,7 @@ type AnnotationContextMenu = { x: number; y: number; annotationId: string | null
 
 const DEFAULT_TEXT_FONT = "Arial, Helvetica, sans-serif";
 const DEFAULT_SIGNATURE_COLOR = "#1a1a2e";
+const DEFAULT_TEXT = "Insert text here";
 
 type Props = { onStatusMessage: (msg: string) => void; };
 
@@ -33,6 +34,8 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   const [contextMenu, setContextMenu] = useState<AnnotationContextMenu | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [draggingPageIndex, setDraggingPageIndex] = useState<number | null>(null);
+  const [dragOverPageIndex, setDragOverPageIndex] = useState<number | null>(null);
   
   const [dragState, setDragState] = useState<{id:string;startX:number;startY:number;origX:number;origY:number}|null>(null);
   const [resizeState, setResizeState] = useState<{id:string;startX:number;startY:number;origW:number;origH:number;origX:number;origY:number;handle:string}|null>(null);
@@ -40,7 +43,6 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
   const [watermarkText, setWatermarkText] = useState("");
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
-  const [textInput, setTextInput] = useState<{x:number;y:number;text:string}|null>(null);
   const [highlightDraw, setHighlightDraw] = useState<{startX:number;startY:number;curX:number;curY:number}|null>(null);
   
   const pageRef = useRef<HTMLDivElement>(null);
@@ -211,20 +213,51 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   function reorderPage(dir: 1 | -1, idx: number) {
     const newIdx = idx + dir;
     if (newIdx < 0 || newIdx >= pages.length) return;
-    const newPages = [...pages];
-    const temp = newPages[idx];
-    newPages[idx] = newPages[newIdx];
-    newPages[newIdx] = temp;
-    
-    // update annotations page indexes
-    const newAnns = annotations.map(a => {
-      if (a.pageIndex === idx) return { ...a, pageIndex: newIdx };
-      if (a.pageIndex === newIdx) return { ...a, pageIndex: idx };
-      return a;
-    });
+    movePageToIndex(idx, newIdx);
+  }
+
+  function movePageToIndex(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || toIndex < 0 || fromIndex >= pages.length || toIndex >= pages.length) return;
+
+    const indexedPages = pages.map((pg, index) => ({ pg, oldIndex: index }));
+    const [moved] = indexedPages.splice(fromIndex, 1);
+    indexedPages.splice(toIndex, 0, moved);
+
+    const oldToNew = new Map(indexedPages.map((entry, newIndex) => [entry.oldIndex, newIndex]));
+    const newPages = indexedPages.map((entry) => entry.pg);
+    const newAnns = annotations.map((ann) => ({ ...ann, pageIndex: oldToNew.get(ann.pageIndex) ?? ann.pageIndex }) as AdvancedAnnotation);
     pushState(newAnns, newPages);
-    if (currentPage === idx) setCurrentPage(newIdx);
-    else if (currentPage === newIdx) setCurrentPage(idx);
+    setCurrentPage(oldToNew.get(currentPage) ?? toIndex);
+    setSelectedId(null);
+    setEditingTextId(null);
+  }
+
+  function handlePageDragStart(index: number, e: React.DragEvent<HTMLElement>) {
+    setDraggingPageIndex(index);
+    setDragOverPageIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(index));
+  }
+
+  function handlePageDragOver(index: number, e: React.DragEvent<HTMLElement>) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverPageIndex(index);
+  }
+
+  function handlePageDrop(index: number, e: React.DragEvent<HTMLElement>) {
+    e.preventDefault();
+    const fromIndex = draggingPageIndex ?? Number(e.dataTransfer.getData("text/plain"));
+    setDraggingPageIndex(null);
+    setDragOverPageIndex(null);
+    if (!Number.isInteger(fromIndex)) return;
+    movePageToIndex(fromIndex, index);
+  }
+
+  function handlePageDragEnd() {
+    setDraggingPageIndex(null);
+    setDragOverPageIndex(null);
   }
 
   function addPageNumbers() {
@@ -249,8 +282,50 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     setContextMenu(null);
   }
 
-  function updateAnnotation(id: string, updates: Partial<AdvancedAnnotation>) {
-    setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } as AdvancedAnnotation : a)));
+  function nextAnnotationsWithUpdate(id: string, updates: Partial<AdvancedAnnotation>) {
+    return annotations.map((a) => (a.id === id ? { ...a, ...updates } as AdvancedAnnotation : a));
+  }
+
+  function updateAnnotation(id: string, updates: Partial<AdvancedAnnotation>, commit = false) {
+    const nextAnnotations = nextAnnotationsWithUpdate(id, updates);
+    if (commit) {
+      pushState(nextAnnotations, pages);
+      return;
+    }
+    setAnnotations(nextAnnotations);
+  }
+
+  function addTextAnnotation(x = 0.5, y = 0.24) {
+    if (!pages[currentPage]) return;
+    const textBox: AdvancedAnnotation = {
+      kind: "text",
+      id: generateId(),
+      pageIndex: currentPage,
+      x,
+      y,
+      w: 0.5,
+      h: 0.16,
+      rotation: 0,
+      text: DEFAULT_TEXT,
+      fontSize: 24,
+      fontFamily: DEFAULT_TEXT_FONT,
+      color: "#111827",
+      bold: false,
+      italic: false,
+    };
+    pushState([...annotations, textBox], pages);
+    setSelectedId(textBox.id);
+    setEditingTextId(textBox.id);
+    setActiveTool("select");
+    onStatusMessage("Text added.");
+  }
+
+  function handleToolChange(tool: Tool) {
+    if (tool === "text" && page) {
+      addTextAnnotation();
+      return;
+    }
+    setActiveTool(tool);
   }
 
   function commitAnnotationEdits() {
@@ -269,7 +344,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     const coords = getRelCoords(e);
     if (!coords) return;
     if (activeTool === "text") {
-      setTextInput({ x: coords.rx, y: coords.ry, text: "" });
+      addTextAnnotation(coords.rx, coords.ry);
       return;
     }
     if (activeTool === "signature") {
@@ -339,17 +414,6 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     setActiveTool("select");
   }
 
-  function commitTextInput() {
-    if (!textInput || !textInput.text.trim()) { setTextInput(null); return; }
-    pushState([...annotations, {
-      kind: "text", id: generateId(), pageIndex: currentPage,
-      x: textInput.x, y: textInput.y, w: 0.3, h: 0.05, rotation: 0, text: textInput.text.trim(),
-      fontSize: 16, fontFamily: DEFAULT_TEXT_FONT, color: "#1e293b", bold: false, italic: false,
-    }], pages);
-    setTextInput(null);
-    setActiveTool("select");
-  }
-
   function handleSignatureApply(dataUrl: string, options: { color: string; strokeWidth: number }) {
     setSigPadOpen(false);
     pushState([...annotations, {
@@ -376,10 +440,16 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   // --- Transform Logic ---
   function startDrag(id: string, e: React.PointerEvent) {
     if (activeTool !== "select") return;
-    e.preventDefault(); e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const ann = annotations.find((a) => a.id === id);
     if (!ann || ann.kind === "watermark") return;
+    if (ann.kind === "text" && e.detail >= 2) {
+      e.stopPropagation();
+      setSelectedId(id);
+      setEditingTextId(id);
+      return;
+    }
+    e.preventDefault(); e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setSelectedId(id);
     setDragState({ id, startX: e.clientX, startY: e.clientY, origX: ann.x, origY: ann.y });
   }
@@ -438,13 +508,6 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       if (newW < 0.02) newW = 0.02;
       if (newH < 0.02) newH = 0.02;
       
-      // Scale font if it's text
-      if (an.kind === "text") {
-         const scale = newH / resizeState.origH;
-         const scaledFont = Math.max(8, an.fontSize * scale);
-         return { ...an, w: newW, h: newH, x: newX, y: newY, fontSize: scaledFont };
-      }
-
       return { ...an, w: newW, h: newH, x: newX, y: newY };
     }));
   }
@@ -656,12 +719,26 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
           <aside className="hidden w-48 shrink-0 overflow-y-auto border-r border-blue-100 bg-blue-50/70 p-4 md:block">
             <div className="flex flex-col items-center gap-4">
               {pages.map((pg, i) => (
-                <div key={pg.id} className="flex flex-col items-center gap-2">
+                <div
+                  key={pg.id}
+                  className={`flex flex-col items-center gap-2 transition ${
+                    draggingPageIndex === i ? "opacity-45" : "opacity-100"
+                  }`}
+                  draggable
+                  onDragStart={(e) => handlePageDragStart(i, e)}
+                  onDragOver={(e) => handlePageDragOver(i, e)}
+                  onDrop={(e) => handlePageDrop(i, e)}
+                  onDragEnd={handlePageDragEnd}
+                >
                   <button
                     type="button"
                     onClick={() => { setCurrentPage(i); setSelectedId(null); }}
                     className={`relative overflow-hidden bg-white shadow-sm transition ${
-                      i === currentPage ? "ring-2 ring-blue-500" : "ring-1 ring-slate-200 hover:ring-blue-300"
+                      i === currentPage
+                        ? "ring-2 ring-blue-500"
+                        : dragOverPageIndex === i
+                          ? "ring-2 ring-blue-300"
+                          : "ring-1 ring-slate-200 hover:ring-blue-300"
                     }`}
                     style={{ width: 112, height: 146 }}
                   >
@@ -689,7 +766,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
           <div className="flex min-w-0 flex-1 flex-col">
             <AdvancedToolbar
-              activeTool={activeTool} setActiveTool={setActiveTool}
+              activeTool={activeTool} setActiveTool={handleToolChange}
               onRotatePage={rotatePage} onDeletePage={deletePage}
               onAddPageNumbers={addPageNumbers} onDownload={exportPdf}
               onUpload={() => fileInputRef.current?.click()}
@@ -697,8 +774,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
               pageCount={pages.length} currentPage={currentPage}
               annotations={annotations} onDeleteAnnotation={deleteAnnotation}
               onUpdateAnnotation={(id, updates) => {
-                updateAnnotation(id, updates);
-                commitAnnotationEdits();
+                updateAnnotation(id, updates, true);
               }}
               selectedAnnotationId={selectedId}
               canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo}
@@ -749,27 +825,22 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                       }} />
                     )}
 
-                    {/* Text input */}
-                    {textInput && (
-                      <div className="absolute z-30" style={{ left: `${textInput.x * 100}%`, top: `${textInput.y * 100}%`, transform: "translate(-50%, -50%)" }}>
-                        <input type="text" autoFocus value={textInput.text} onChange={(e) => setTextInput((t) => t ? { ...t, text: e.target.value } : null)}
-                          onKeyDown={(e) => { if (e.key === "Enter") commitTextInput(); if (e.key === "Escape") setTextInput(null); }}
-                          onBlur={commitTextInput}
-                          className="rounded-lg border-2 border-emerald-400 bg-white px-2 py-1 text-sm shadow-lg outline-none min-w-[120px]"
-                          placeholder="Type text..." />
-                      </div>
-                    )}
-
                     {/* Render annotations */}
                     {annotations.filter((a) => a.pageIndex === currentPage && a.kind !== "watermark").map((ann) => {
                       if (ann.kind === "watermark") return null;
                       const isSelected = selectedId === ann.id;
                       return (
-                        <div key={ann.id} data-annotation-id={ann.id} className={`annotation-layer group absolute cursor-move border ${isSelected ? "border-blue-400" : "border-transparent hover:border-blue-300/80"}`}
+                        <div key={ann.id} data-annotation-id={ann.id} className={`annotation-layer group absolute cursor-move border ${isSelected ? `border-blue-400 ${ann.kind === "text" ? "bg-sky-50/70" : ""}` : "border-transparent hover:border-blue-300/80"}`}
                           style={{
                             left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
                             width: `${ann.w * 100}%`, height: `${ann.h * 100}%`,
                             transform: `translate(-50%, -50%) rotate(${ann.rotation}deg)`,
+                          }}
+                          onDoubleClick={(e) => {
+                            if (ann.kind !== "text") return;
+                            e.stopPropagation();
+                            setSelectedId(ann.id);
+                            setEditingTextId(ann.id);
                           }}
                           onPointerDown={(e) => startDrag(ann.id, e)}>
                           
@@ -782,15 +853,27 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                                       autoFocus
                                       value={ann.text}
                                       onChange={(e) => updateAnnotation(ann.id, { text: e.target.value })}
-                                      onBlur={() => { setEditingTextId(null); commitAnnotationEdits(); }}
+                                      onBlur={(e) => {
+                                        const nextAnnotations = nextAnnotationsWithUpdate(ann.id, { text: e.currentTarget.value || DEFAULT_TEXT });
+                                        setEditingTextId(null);
+                                        pushState(nextAnnotations, pages);
+                                      }}
+                                      onFocus={(e) => e.currentTarget.select()}
                                       onPointerDown={(e) => e.stopPropagation()}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Escape") {
+                                          e.preventDefault();
+                                          setEditingTextId(null);
+                                          commitAnnotationEdits();
+                                        }
+                                      }}
                                       style={{
                                         fontFamily: ann.fontFamily || DEFAULT_TEXT_FONT,
                                         fontSize: `${ann.fontSize}px`, color: ann.color,
                                         fontWeight: ann.bold ? "bold" : "normal", fontStyle: ann.italic ? "italic" : "normal",
                                         lineHeight: 1.2
                                       }}
-                                      className="h-full w-full resize-none overflow-hidden border-none bg-transparent p-1 m-0 outline-none"
+                                      className="h-full w-full resize-none overflow-hidden border-none bg-sky-50/70 p-1 m-0 outline-none"
                                     />
                                   ) : (
                                     <div
@@ -854,10 +937,18 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-4 w-full px-2 items-center md:hidden">
                   {pages.map((pg, i) => (
-                    <div key={pg.id} className="flex flex-col gap-1 items-center">
+                    <div
+                      key={pg.id}
+                      className={`flex flex-col gap-1 items-center transition ${draggingPageIndex === i ? "opacity-45" : "opacity-100"}`}
+                      draggable
+                      onDragStart={(e) => handlePageDragStart(i, e)}
+                      onDragOver={(e) => handlePageDragOver(i, e)}
+                      onDrop={(e) => handlePageDrop(i, e)}
+                      onDragEnd={handlePageDragEnd}
+                    >
                        <button type="button" onClick={() => { setCurrentPage(i); setSelectedId(null); }}
                          className={`flex-shrink-0 rounded-xl overflow-hidden border-2 transition ${
-                           i === currentPage ? "border-emerald-500 shadow-md scale-105" : "border-slate-200 hover:border-slate-300"
+                           i === currentPage ? "border-blue-500 shadow-md scale-105" : dragOverPageIndex === i ? "border-blue-300" : "border-slate-200 hover:border-slate-300"
                          }`} style={{ width: 72, height: 90 }}>
                          <img src={pg.dataUrl} alt={`Page ${i + 1}`} className="h-full w-full object-cover"
                            style={{ transform: `rotate(${pg.rotation}deg)` }} draggable={false} />
