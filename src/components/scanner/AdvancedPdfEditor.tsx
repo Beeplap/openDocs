@@ -180,7 +180,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   }
 
   function updateAnnotation(id: string, updates: Partial<AdvancedAnnotation>) {
-    setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+    setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } as AdvancedAnnotation : a)));
   }
 
   function commitAnnotationEdits() {
