@@ -70,12 +70,20 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
   function getPos(e: React.PointerEvent<HTMLCanvasElement>): Point {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
-    };
+    if (isMobileLandscape) {
+      const padX = e.clientY - rect.top;
+      const padY = rect.width - (e.clientX - rect.left);
+      const scaleX = canvas.width / rect.height;
+      const scaleY = canvas.height / rect.width;
+      return { x: padX * scaleX, y: padY * scaleY };
+    } else {
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY,
+      };
+    }
   }
 
   function startDraw(e: React.PointerEvent<HTMLCanvasElement>) {
