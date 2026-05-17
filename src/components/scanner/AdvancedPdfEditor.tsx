@@ -9,11 +9,15 @@ import { renderPdfAllPagesToCanvases, buildAnnotatedPdf } from "../../utils/pdfU
 type PageData = { dataUrl: string; width: number; height: number; rotation: number; id: string };
 
 type HistoryEntry = { annotations: AdvancedAnnotation[]; pages: PageData[]; };
+type EditableAnnotation = Exclude<AdvancedAnnotation, { kind: "watermark" }>;
+type AnnotationContextMenu = { x: number; y: number; annotationId: string | null };
+
+const DEFAULT_TEXT_FONT = "Arial, Helvetica, sans-serif";
+const DEFAULT_SIGNATURE_COLOR = "#1a1a2e";
 
 type Props = { onStatusMessage: (msg: string) => void; };
 
 export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
-  const [file, setFile] = useState<File | null>(null);
   const [pages, setPages] = useState<PageData[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [annotations, setAnnotations] = useState<AdvancedAnnotation[]>([]);
@@ -25,6 +29,8 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   const [sigPadOpen, setSigPadOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [copiedAnnotation, setCopiedAnnotation] = useState<EditableAnnotation | null>(null);
+  const [contextMenu, setContextMenu] = useState<AnnotationContextMenu | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -76,23 +82,84 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     });
   }, [historyIndex]);
 
+  const getEditableAnnotation = useCallback((id: string | null): EditableAnnotation | null => {
+    if (!id) return null;
+    const ann = annotations.find((a) => a.id === id);
+    if (!ann || ann.kind === "watermark") return null;
+    return ann;
+  }, [annotations]);
+
+  const cloneAnnotation = useCallback((ann: EditableAnnotation, pageIndex: number, offset = 0): EditableAnnotation => {
+    const maxX = 1 - ann.w / 2;
+    const maxY = 1 - ann.h / 2;
+    return {
+      ...ann,
+      id: generateId(),
+      pageIndex,
+      x: clamp(ann.x + offset, ann.w / 2, maxX),
+      y: clamp(ann.y + offset, ann.h / 2, maxY),
+    };
+  }, []);
+
+  const copyAnnotation = useCallback((id = selectedId) => {
+    const ann = getEditableAnnotation(id);
+    if (!ann) return;
+    setCopiedAnnotation({ ...ann });
+    setSelectedId(ann.id);
+    setContextMenu(null);
+    onStatusMessage(`${labelForAnnotation(ann)} copied.`);
+  }, [getEditableAnnotation, onStatusMessage, selectedId]);
+
+  const pasteAnnotation = useCallback(() => {
+    if (!copiedAnnotation || pages.length === 0) return;
+    const pasted = cloneAnnotation(copiedAnnotation, currentPage);
+    pushState([...annotations, pasted], pages);
+    setSelectedId(pasted.id);
+    setContextMenu(null);
+    onStatusMessage(`${labelForAnnotation(pasted)} pasted on page ${currentPage + 1}.`);
+  }, [annotations, cloneAnnotation, copiedAnnotation, currentPage, onStatusMessage, pages, pushState]);
+
+  function duplicateAnnotation(id = selectedId) {
+    const ann = getEditableAnnotation(id);
+    if (!ann) return;
+    const duplicated = cloneAnnotation(ann, ann.pageIndex, 0.03);
+    pushState([...annotations, duplicated], pages);
+    setSelectedId(duplicated.id);
+    setContextMenu(null);
+    onStatusMessage(`${labelForAnnotation(ann)} duplicated.`);
+  }
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        if (e.key === "z") { e.preventDefault(); undo(); }
-        else if (e.key === "y") { e.preventDefault(); redo(); }
+        const key = e.key.toLowerCase();
+        if (key === "z") { e.preventDefault(); undo(); }
+        else if (key === "y") { e.preventDefault(); redo(); }
+        else if (key === "c" && selectedId) { e.preventDefault(); copyAnnotation(selectedId); }
+        else if (key === "v" && copiedAnnotation) { e.preventDefault(); pasteAnnotation(); }
       } else if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedId) {
           e.preventDefault();
           pushState(annotations.filter((an) => an.id !== selectedId), pages);
           setSelectedId(null);
+          setContextMenu(null);
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undo, redo, selectedId, annotations, pages, pushState]);
+  }, [undo, redo, selectedId, copiedAnnotation, annotations, pages, pushState, copyAnnotation, pasteAnnotation]);
+
+  useEffect(() => {
+    const closeMenu = () => setContextMenu(null);
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, []);
 
   const loadPdf = useCallback(async (f: File) => {
     setIsLoading(true);
@@ -112,6 +179,9 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       setCurrentPage(0);
       setAnnotations([]);
       setSelectedId(null);
+      setEditingTextId(null);
+      setCopiedAnnotation(null);
+      setContextMenu(null);
       onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`);
     } catch { onStatusMessage("Failed to load PDF."); }
     finally { setIsLoading(false); }
@@ -120,7 +190,6 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFile(f);
     void loadPdf(f);
     e.target.value = "";
   }
@@ -168,7 +237,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     const newAnns: AdvancedAnnotation[] = pages.map((_, i) => ({
       kind: "text" as const, id: generateId(), pageIndex: i,
       x: 0.5, y: 0.96, w: 0.2, h: 0.05, rotation: 0, text: `Page ${i + 1} of ${pages.length}`,
-      fontSize: 12, color: "#64748b", bold: false, italic: false,
+      fontSize: 12, fontFamily: DEFAULT_TEXT_FONT, color: "#64748b", bold: false, italic: false,
     }));
     pushState([...annotations, ...newAnns], pages);
     onStatusMessage("Page numbers added.");
@@ -177,6 +246,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   function deleteAnnotation(id: string) {
     pushState(annotations.filter((an) => an.id !== id), pages);
     if (selectedId === id) setSelectedId(null);
+    setContextMenu(null);
   }
 
   function updateAnnotation(id: string, updates: Partial<AdvancedAnnotation>) {
@@ -195,6 +265,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   }
 
   function handlePageClick(e: React.MouseEvent) {
+    setContextMenu(null);
     const coords = getRelCoords(e);
     if (!coords) return;
     if (activeTool === "text") {
@@ -219,6 +290,16 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
         }
       }
     }
+  }
+
+  function handlePageContextMenu(e: React.MouseEvent) {
+    if (pages.length === 0) return;
+    e.preventDefault();
+    const target = e.target as HTMLElement;
+    const annotationEl = target.closest<HTMLElement>("[data-annotation-id]");
+    const annotationId = annotationEl?.dataset.annotationId ?? null;
+    if (annotationId) setSelectedId(annotationId);
+    setContextMenu({ x: e.clientX, y: e.clientY, annotationId });
   }
 
   function handleHighlightDown(e: React.PointerEvent) {
@@ -263,17 +344,18 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     pushState([...annotations, {
       kind: "text", id: generateId(), pageIndex: currentPage,
       x: textInput.x, y: textInput.y, w: 0.3, h: 0.05, rotation: 0, text: textInput.text.trim(),
-      fontSize: 16, color: "#1e293b", bold: false, italic: false,
+      fontSize: 16, fontFamily: DEFAULT_TEXT_FONT, color: "#1e293b", bold: false, italic: false,
     }], pages);
     setTextInput(null);
     setActiveTool("select");
   }
 
-  function handleSignatureApply(dataUrl: string) {
+  function handleSignatureApply(dataUrl: string, options: { color: string; strokeWidth: number }) {
     setSigPadOpen(false);
     pushState([...annotations, {
       kind: "signature", id: generateId(), pageIndex: currentPage,
       x: 0.5, y: 0.5, w: 0.4, h: 0.15, rotation: 0, dataUrl, opacity: 1,
+      color: options.color, strokeWidth: options.strokeWidth,
     }], pages);
     setActiveTool("select");
     onStatusMessage("Signature added. Drag to reposition, resize, or rotate.");
@@ -357,13 +439,13 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       if (newH < 0.02) newH = 0.02;
       
       // Scale font if it's text
-      let scaledFont = an.kind === "text" ? an.fontSize : undefined;
       if (an.kind === "text") {
          const scale = newH / resizeState.origH;
-         scaledFont = Math.max(8, an.fontSize * scale);
+         const scaledFont = Math.max(8, an.fontSize * scale);
+         return { ...an, w: newW, h: newH, x: newX, y: newY, fontSize: scaledFont };
       }
 
-      return { ...an, w: newW, h: newH, x: newX, y: newY, fontSize: scaledFont ?? (an as any).fontSize };
+      return { ...an, w: newW, h: newH, x: newX, y: newY };
     }));
   }
 
@@ -452,11 +534,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
             ctx.rotate((ann.rotation * Math.PI) / 180);
             
             if (ann.kind === "text") {
-              ctx.font = `${ann.italic ? "italic " : ""}${ann.bold ? "bold " : ""}${Math.round(ann.fontSize * (w / 800))}px sans-serif`;
-              ctx.fillStyle = ann.color;
-              ctx.textAlign = "center";
-              ctx.textBaseline = "middle";
-              ctx.fillText(ann.text, 0, 0);
+              drawTextBox(ctx, ann, ann.w * w, ann.h * h, w);
             } else if (ann.kind === "highlight") {
               ctx.fillStyle = ann.color;
               ctx.globalAlpha = ann.opacity;
@@ -464,7 +542,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
             } else if (ann.kind === "signature") {
               const sigImg = await loadImg(ann.dataUrl);
               ctx.globalAlpha = ann.opacity;
-              ctx.drawImage(sigImg, -ann.w * w / 2, -ann.h * h / 2, ann.w * w, ann.h * h);
+              drawSignatureImage(ctx, sigImg, ann.w * w, ann.h * h, ann.color, ann.strokeWidth);
             }
             ctx.restore();
           }
@@ -509,6 +587,38 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
         </div>
       )}
 
+      {contextMenu && (
+        <div
+          className="fixed z-[60] w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-sm font-semibold text-slate-700 shadow-2xl"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {contextMenu.annotationId ? (
+            <>
+              <button type="button" onClick={() => copyAnnotation(contextMenu.annotationId)} className="block w-full px-3 py-2 text-left hover:bg-slate-50">
+                Copy
+              </button>
+              <button type="button" onClick={() => duplicateAnnotation(contextMenu.annotationId)} className="block w-full px-3 py-2 text-left hover:bg-slate-50">
+                Duplicate
+              </button>
+              <button type="button" onClick={() => deleteAnnotation(contextMenu.annotationId!)} className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50">
+                Delete
+              </button>
+              <div className="my-1 border-t border-slate-100" />
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={pasteAnnotation}
+            disabled={!copiedAnnotation}
+            className="block w-full px-3 py-2 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            Paste to page
+          </button>
+        </div>
+      )}
+
       {/* Mobile Top Toolbar for Undo/Redo */}
       {pages.length > 0 && (
         <div className="lg:hidden flex items-center justify-between bg-white border-b border-slate-200 p-2">
@@ -540,7 +650,6 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                 e.preventDefault();
                 const f = e.dataTransfer.files?.[0];
                 if (f && f.type === "application/pdf") {
-                  setFile(f);
                   void loadPdf(f);
                 } else if (f) {
                   onStatusMessage("Please upload a valid PDF file.");
@@ -571,8 +680,9 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                   <div ref={pageRef} className="relative overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-slate-200 touch-none"
                     style={{ aspectRatio: page!.rotation % 180 !== 0 ? `${page!.height}/${page!.width}` : `${page!.width}/${page!.height}` }}
                     onClick={handlePageClick}
+                    onContextMenu={handlePageContextMenu}
                     onPointerDown={handleHighlightDown} onPointerMove={(e) => { handleHighlightMove(e); onDragMove(e); onResizeMove(e); onRotateMove(e); }}
-                    onPointerUp={(e) => { handleHighlightUp(); onDragEnd(); onResizeEnd(); onRotateEnd(); }}>
+                    onPointerUp={() => { handleHighlightUp(); onDragEnd(); onResizeEnd(); onRotateEnd(); }}>
                     
                     <img src={page!.dataUrl} alt={`Page ${currentPage + 1}`}
                       className="h-full w-full object-contain pointer-events-none"
@@ -580,13 +690,15 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
                     {/* Watermark Preview */}
                     <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden opacity-[0.08]">
-                      {annotations.filter(a => a.pageIndex === currentPage && a.kind === "watermark").map(ann => (
+                      {annotations
+                        .filter((a): a is Extract<AdvancedAnnotation, { kind: "watermark" }> => a.pageIndex === currentPage && a.kind === "watermark")
+                        .map(ann => (
                          <div key={ann.id} className="absolute -inset-[100%] flex flex-wrap content-start" style={{ transform: "rotate(-45deg)" }}>
                            {Array.from({length: 100}).map((_, i) => (
-                             <span key={i} className="text-4xl text-slate-500 font-bold italic m-10 whitespace-nowrap">{(ann as any).text}</span>
+                             <span key={i} className="text-4xl text-slate-500 font-bold italic m-10 whitespace-nowrap">{ann.text}</span>
                            ))}
                          </div>
-                      ))}
+                        ))}
                     </div>
 
                     {/* Highlight drawing preview */}
@@ -615,7 +727,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                       if (ann.kind === "watermark") return null;
                       const isSelected = selectedId === ann.id;
                       return (
-                        <div key={ann.id} className={`annotation-layer absolute cursor-move ${isSelected ? "ring-2 ring-emerald-500 bg-emerald-500/10" : ""}`}
+                        <div key={ann.id} data-annotation-id={ann.id} className={`annotation-layer group absolute cursor-move rounded-sm border ${isSelected ? "border-emerald-400 ring-2 ring-emerald-500 bg-emerald-500/10" : "border-transparent hover:border-emerald-300/70"}`}
                           style={{
                             left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
                             width: `${ann.w * 100}%`, height: `${ann.h * 100}%`,
@@ -624,7 +736,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                           onPointerDown={(e) => startDrag(ann.id, e)}>
                           
                           {/* Content rendering */}
-                          <div className="w-full h-full pointer-events-none flex items-center justify-center">
+                          <div className="w-full h-full pointer-events-none flex items-center justify-center overflow-hidden">
                              {ann.kind === "text" && (
                                 <div className="w-full h-full pointer-events-auto">
                                   {editingTextId === ann.id ? (
@@ -635,21 +747,24 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                                       onBlur={() => { setEditingTextId(null); commitAnnotationEdits(); }}
                                       onPointerDown={(e) => e.stopPropagation()}
                                       style={{
+                                        fontFamily: ann.fontFamily || DEFAULT_TEXT_FONT,
                                         fontSize: `${ann.fontSize}px`, color: ann.color,
                                         fontWeight: ann.bold ? "bold" : "normal", fontStyle: ann.italic ? "italic" : "normal",
                                         lineHeight: 1.2
                                       }}
-                                      className="w-full h-full bg-transparent resize-none outline-none p-0 m-0 border-none overflow-hidden"
+                                      className="h-full w-full resize-none overflow-hidden border-none bg-transparent p-1 m-0 outline-none"
                                     />
                                   ) : (
                                     <div
-                                      onDoubleClick={() => setEditingTextId(ann.id)}
+                                      onDoubleClick={(e) => { e.stopPropagation(); setSelectedId(ann.id); setEditingTextId(ann.id); }}
                                       style={{
+                                        fontFamily: ann.fontFamily || DEFAULT_TEXT_FONT,
                                         fontSize: `${ann.fontSize}px`, color: ann.color,
                                         fontWeight: ann.bold ? "bold" : "normal", fontStyle: ann.italic ? "italic" : "normal",
-                                        whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.2,
+                                        whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.2, overflow: "hidden",
                                         width: "100%", height: "100%"
-                                      }}>
+                                      }}
+                                      className="p-1">
                                       {ann.text}
                                     </div>
                                   )}
@@ -659,7 +774,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                                 <div style={{ backgroundColor: ann.color, opacity: ann.opacity, width: "100%", height: "100%" }} />
                              )}
                              {ann.kind === "signature" && (
-                                <img src={ann.dataUrl} alt="Signature" className="h-full w-full object-contain" draggable={false} />
+                                <div className="h-full w-full" style={signaturePreviewStyle(ann)} aria-label="Signature" />
                              )}
                           </div>
 
@@ -732,6 +847,114 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 }
 
 function clamp(n: number, min: number, max: number) { return Math.min(max, Math.max(min, n)); }
+
+function labelForAnnotation(ann: EditableAnnotation) {
+  if (ann.kind === "text") return "Text box";
+  if (ann.kind === "signature") return "Signature";
+  return "Highlight";
+}
+
+function drawTextBox(
+  ctx: CanvasRenderingContext2D,
+  ann: Extract<AdvancedAnnotation, { kind: "text" }>,
+  boxW: number,
+  boxH: number,
+  pageW: number
+) {
+  const fontSize = Math.max(6, Math.round(ann.fontSize * (pageW / 800)));
+  const lineHeight = fontSize * 1.2;
+  const left = -boxW / 2;
+  const top = -boxH / 2;
+  const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
+  ctx.font = `${ann.italic ? "italic " : ""}${ann.bold ? "bold " : ""}${fontSize}px ${ann.fontFamily || DEFAULT_TEXT_FONT}`;
+  const lines = wrapText(ctx, ann.text, boxW, maxLines);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left, top, boxW, boxH);
+  ctx.clip();
+  ctx.fillStyle = ann.color;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  lines.forEach((line, index) => {
+    ctx.fillText(line, left, top + index * lineHeight);
+  });
+  ctx.restore();
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number) {
+  const lines: string[] = [];
+  const paragraphs = text.split(/\r?\n/);
+  for (const paragraph of paragraphs) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      lines.push("");
+      if (lines.length >= maxLines) return lines;
+      continue;
+    }
+    let line = "";
+    for (const word of words) {
+      const nextLine = line ? `${line} ${word}` : word;
+      if (ctx.measureText(nextLine).width <= maxWidth || !line) {
+        line = nextLine;
+      } else {
+        lines.push(line);
+        if (lines.length >= maxLines) return lines;
+        line = word;
+      }
+    }
+    lines.push(line);
+    if (lines.length >= maxLines) return lines;
+  }
+  return lines;
+}
+
+function drawSignatureImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  width: number,
+  height: number,
+  color = DEFAULT_SIGNATURE_COLOR,
+  strokeWidth = 3
+) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.ceil(width));
+  canvas.height = Math.max(1, Math.ceil(height));
+  const sigCtx = canvas.getContext("2d");
+  if (!sigCtx) {
+    ctx.drawImage(img, -width / 2, -height / 2, width, height);
+    return;
+  }
+
+  const radius = Math.max(0, Math.round((strokeWidth - 3) * Math.max(width, height) / 420));
+  for (let dx = -radius; dx <= radius; dx += 1) {
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      if (dx * dx + dy * dy <= radius * radius) {
+        sigCtx.drawImage(img, dx, dy, canvas.width, canvas.height);
+      }
+    }
+  }
+  if (radius === 0) sigCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  sigCtx.globalCompositeOperation = "source-in";
+  sigCtx.fillStyle = color;
+  sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(canvas, -width / 2, -height / 2, width, height);
+  canvas.remove();
+}
+
+function signaturePreviewStyle(ann: Extract<AdvancedAnnotation, { kind: "signature" }>): React.CSSProperties {
+  const color = ann.color || DEFAULT_SIGNATURE_COLOR;
+  const grow = Math.max(0, (ann.strokeWidth || 3) - 3);
+  const mask = `url(${ann.dataUrl}) center / contain no-repeat`;
+  return {
+    backgroundColor: color,
+    opacity: ann.opacity,
+    WebkitMask: mask,
+    mask,
+    filter: grow > 0 ? `drop-shadow(0 0 ${grow}px ${color})` : undefined,
+  };
+}
 
 function loadImg(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {

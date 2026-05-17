@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = {
   open: boolean;
-  onApply: (dataUrl: string) => void;
+  onApply: (dataUrl: string, options: { color: string; strokeWidth: number }) => void;
   onClose: () => void;
 };
 
@@ -129,7 +129,7 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
     if (!canvas || !hasStrokes) return;
     // Trim transparent edges for cleaner result
     const trimmed = trimCanvas(canvas);
-    onApply(trimmed);
+    onApply(trimmed, { color: penColor, strokeWidth: penSize });
   }
 
   if (!open) return null;

@@ -34,6 +34,14 @@ const tools: { id: Tool; label: string; icon: string }[] = [
   { id: "watermark", label: "Watermark", icon: "💧" },
 ];
 
+const fontOptions = [
+  { label: "Sans", value: "Arial, Helvetica, sans-serif" },
+  { label: "Serif", value: "Georgia, Times New Roman, serif" },
+  { label: "Mono", value: "Courier New, Courier, monospace" },
+  { label: "Rounded", value: "Trebuchet MS, Arial, sans-serif" },
+  { label: "Display", value: "Verdana, Geneva, sans-serif" },
+];
+
 export default function AdvancedToolbar({
   activeTool, setActiveTool, onRotatePage, onDeletePage,
   onAddPageNumbers, onDownload, onUpload, isExporting,
@@ -108,6 +116,18 @@ export default function AdvancedToolbar({
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Text Formatting</p>
               <div className="flex flex-wrap gap-2 items-center bg-white rounded-xl border border-slate-200 p-2">
+                <select
+                  value={selectedAnn.fontFamily || fontOptions[0].value}
+                  onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontFamily: e.target.value })}
+                  className="min-w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-500"
+                  aria-label="Font family"
+                >
+                  {fontOptions.map((font) => (
+                    <option key={font.value} value={font.value}>
+                      {font.label}
+                    </option>
+                  ))}
+                </select>
                 <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { bold: !selectedAnn.bold })}
                   className={`flex h-8 w-8 items-center justify-center rounded-lg font-serif font-bold transition ${selectedAnn.bold ? "bg-emerald-100 text-emerald-800" : "text-slate-600 hover:bg-slate-100"}`}>
                   B
@@ -125,6 +145,39 @@ export default function AdvancedToolbar({
                 <input type="color" value={selectedAnn.color || "#1e293b"}
                   onChange={(e) => onUpdateAnnotation(selectedAnn.id, { color: e.target.value })}
                   className="h-7 w-7 cursor-pointer rounded-full border-0 p-0" />
+              </div>
+            </div>
+          )}
+
+          {/* Signature Formatting */}
+          {selectedAnn && selectedAnn.kind === "signature" && onUpdateAnnotation && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Signature Style</p>
+              <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                <label className="flex items-center justify-between gap-3 text-xs font-semibold text-slate-600">
+                  Color
+                  <input
+                    type="color"
+                    value={selectedAnn.color || "#1a1a2e"}
+                    onChange={(e) => onUpdateAnnotation(selectedAnn.id, { color: e.target.value })}
+                    className="h-8 w-10 cursor-pointer rounded-lg border border-slate-200 bg-white p-0"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                  Line size
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={1}
+                      max={12}
+                      step={0.5}
+                      value={selectedAnn.strokeWidth || 3}
+                      onChange={(e) => onUpdateAnnotation(selectedAnn.id, { strokeWidth: parseFloat(e.target.value) || 3 })}
+                      className="w-full accent-emerald-600"
+                    />
+                    <span className="w-8 text-right text-xs text-slate-400">{selectedAnn.strokeWidth || 3}</span>
+                  </div>
+                </label>
               </div>
             </div>
           )}
