@@ -18,7 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import SignaturePad from "./SignaturePad";
 import AdvancedToolbar from "./AdvancedToolbar";
-import type { Tool } from "./AdvancedToolbar";
+import type { DrawMode, DrawSettings, Tool } from "./AdvancedToolbar";
 import type { AdvancedAnnotation } from "./types";
 import { renderPdfAllPagesToCanvases, buildAnnotatedPdf } from "../../utils/pdfUtils";
 
@@ -31,6 +31,13 @@ type AnnotationContextMenu = { x: number; y: number; annotationId: string | null
 const DEFAULT_TEXT_FONT = "Arial, Helvetica, sans-serif";
 const DEFAULT_SIGNATURE_COLOR = "#1a1a2e";
 const DEFAULT_TEXT = "Insert text here";
+const DEFAULT_DRAW_SETTINGS: DrawSettings = {
+  penColor: "#111827",
+  penSize: 3,
+  highlighterColor: "#fde047",
+  highlighterOpacity: 0.4,
+  eraserSize: 28,
+};
 
 type Props = { onStatusMessage: (msg: string) => void; };
 
@@ -42,7 +49,9 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const [activeTool, setActiveTool] = useState<Tool>("select");
+  const [activeTool, setActiveTool] = useState<Tool>("pan");
+  const [drawMode, setDrawMode] = useState<DrawMode>("pen");
+  const [drawSettings, setDrawSettings] = useState<DrawSettings>(DEFAULT_DRAW_SETTINGS);
   const [sigPadOpen, setSigPadOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -58,9 +67,14 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   const [watermarkText, setWatermarkText] = useState("");
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
   const [highlightDraw, setHighlightDraw] = useState<{startX:number;startY:number;curX:number;curY:number}|null>(null);
+  const [inkDraw, setInkDraw] = useState<{ points: { x: number; y: number }[] } | null>(null);
+  const [eraserPreview, setEraserPreview] = useState<{ x: number; y: number } | null>(null);
+  const [panState, setPanState] = useState<{ pointerId: number; startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
   
   const pageRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const eraserSessionRef = useRef<{ deletedIds: Set<string>; baseAnnotations: AdvancedAnnotation[] } | null>(null);
   const pageSortSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor)
@@ -110,6 +124,17 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   }, [annotations]);
 
   const cloneAnnotation = useCallback((ann: EditableAnnotation, pageIndex: number, offset = 0): EditableAnnotation => {
+    if (ann.kind === "ink") {
+      return {
+        ...ann,
+        id: generateId(),
+        pageIndex,
+        points: ann.points.map((point) => ({
+          x: clamp(point.x + offset, 0, 1),
+          y: clamp(point.y + offset, 0, 1),
+        })),
+      };
+    }
     const maxX = 1 - ann.w / 2;
     const maxY = 1 - ann.h / 2;
     return {
@@ -158,6 +183,18 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
         else if (key === "y") { e.preventDefault(); redo(); }
         else if (key === "c" && selectedId) { e.preventDefault(); copyAnnotation(selectedId); }
         else if (key === "v" && copiedAnnotation) { e.preventDefault(); pasteAnnotation(); }
+      } else if (e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setActiveTool("pan");
+        setSelectedId(null);
+        setEditingTextId(null);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setActiveTool("select");
+        setHighlightDraw(null);
+        setInkDraw(null);
+        setEraserPreview(null);
+        setPanState(null);
       } else if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedId) {
           e.preventDefault();
@@ -202,6 +239,8 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       setEditingTextId(null);
       setCopiedAnnotation(null);
       setContextMenu(null);
+      setActiveTool("pan");
+      setDrawSettings(DEFAULT_DRAW_SETTINGS);
       onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`);
     } catch { onStatusMessage("Failed to load PDF."); }
     finally { setIsLoading(false); }
@@ -336,13 +375,17 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     const el = pageRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
-    return { rx: (e.clientX - rect.left) / rect.width, ry: (e.clientY - rect.top) / rect.height };
+    return {
+      rx: clamp((e.clientX - rect.left) / rect.width, 0, 1),
+      ry: clamp((e.clientY - rect.top) / rect.height, 0, 1),
+    };
   }
 
   function handlePageClick(e: React.MouseEvent) {
     setContextMenu(null);
     const coords = getRelCoords(e);
     if (!coords) return;
+    if (activeTool === "pan" || activeTool === "draw") return;
     if (activeTool === "text") {
       addTextAnnotation(coords.rx, coords.ry);
       return;
@@ -377,23 +420,85 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     setContextMenu({ x: e.clientX, y: e.clientY, annotationId });
   }
 
-  function handleHighlightDown(e: React.PointerEvent) {
-    if (activeTool !== "highlight") return;
+  function handlePanDown(e: React.PointerEvent) {
+    if (activeTool !== "pan") return;
+    const scroller = scrollContainerRef.current;
+    if (!scroller) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setPanState({
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      scrollLeft: scroller.scrollLeft,
+      scrollTop: scroller.scrollTop,
+    });
+  }
+
+  function handlePanMove(e: React.PointerEvent) {
+    if (!panState || panState.pointerId !== e.pointerId) return;
+    const scroller = scrollContainerRef.current;
+    if (!scroller) return;
+    scroller.scrollLeft = panState.scrollLeft - (e.clientX - panState.startX);
+    scroller.scrollTop = panState.scrollTop - (e.clientY - panState.startY);
+  }
+
+  function handlePanUp() {
+    setPanState(null);
+  }
+
+  function handleDrawDown(e: React.PointerEvent) {
+    if (activeTool !== "draw") return;
     const coords = getRelCoords(e);
     if (!coords) return;
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setHighlightDraw({ startX: coords.rx, startY: coords.ry, curX: coords.rx, curY: coords.ry });
+    if (drawMode === "highlighter") {
+      setHighlightDraw({ startX: coords.rx, startY: coords.ry, curX: coords.rx, curY: coords.ry });
+      return;
+    }
+    if (drawMode === "eraser") {
+      eraserSessionRef.current = { deletedIds: new Set(), baseAnnotations: annotations };
+      setEraserPreview({ x: coords.rx, y: coords.ry });
+      eraseAnnotationAt(coords.rx, coords.ry);
+      return;
+    }
+    setInkDraw({ points: [{ x: coords.rx, y: coords.ry }] });
   }
 
-  function handleHighlightMove(e: React.PointerEvent) {
-    if (!highlightDraw) return;
+  function handleDrawMove(e: React.PointerEvent) {
+    if (activeTool !== "draw") return;
     const coords = getRelCoords(e);
     if (!coords) return;
-    setHighlightDraw((h) => h ? { ...h, curX: coords.rx, curY: coords.ry } : null);
+    if (drawMode === "highlighter" && highlightDraw) {
+      setHighlightDraw((h) => h ? { ...h, curX: coords.rx, curY: coords.ry } : null);
+      return;
+    }
+    if (drawMode === "eraser") {
+      setEraserPreview({ x: coords.rx, y: coords.ry });
+      eraseAnnotationAt(coords.rx, coords.ry);
+      return;
+    }
+    if (inkDraw) {
+      setInkDraw((draw) => draw ? { points: [...draw.points, { x: coords.rx, y: coords.ry }] } : null);
+    }
   }
 
-  function handleHighlightUp() {
+  function handleDrawUp() {
+    if (drawMode === "eraser") {
+      finishEraseDraw();
+      return;
+    }
+    if (highlightDraw) {
+      finishHighlightDraw();
+      return;
+    }
+    if (inkDraw) {
+      finishInkDraw();
+    }
+  }
+
+  function finishHighlightDraw() {
     if (!highlightDraw) return;
     const startX = highlightDraw.startX;
     const startY = highlightDraw.startY;
@@ -407,11 +512,51 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     if (w > 0.01 && h > 0.005) {
       pushState([...annotations, {
         kind: "highlight", id: generateId(), pageIndex: currentPage,
-        x: cx, y: cy, w, h, rotation: 0, color: "#fde047", opacity: 0.4,
+        x: cx, y: cy, w, h, rotation: 0, color: drawSettings.highlighterColor, opacity: drawSettings.highlighterOpacity,
       }], pages);
     }
     setHighlightDraw(null);
-    setActiveTool("select");
+  }
+
+  function finishInkDraw() {
+    if (!inkDraw || inkDraw.points.length < 2) {
+      setInkDraw(null);
+      return;
+    }
+    pushState([...annotations, {
+      kind: "ink",
+      id: generateId(),
+      pageIndex: currentPage,
+      points: inkDraw.points,
+      color: drawSettings.penColor,
+      opacity: 1,
+      strokeWidth: drawSettings.penSize,
+    }], pages);
+    setInkDraw(null);
+  }
+
+  function eraseAnnotationAt(rx: number, ry: number) {
+    const radius = getEraserRadius(drawSettings.eraserSize);
+    let erasedId: string | null = null;
+    setAnnotations((prev) => {
+      const target = [...prev]
+        .reverse()
+        .find((ann) => ann.pageIndex === currentPage && ann.kind !== "watermark" && isAnnotationAtPoint(ann, rx, ry, radius));
+      if (!target) return prev;
+      erasedId = target.id;
+      eraserSessionRef.current?.deletedIds.add(target.id);
+      return prev.filter((ann) => ann.id !== target.id);
+    });
+    if (erasedId && selectedId === erasedId) setSelectedId(null);
+  }
+
+  function finishEraseDraw() {
+    const session = eraserSessionRef.current;
+    setEraserPreview(null);
+    eraserSessionRef.current = null;
+    if (!session || session.deletedIds.size === 0) return;
+    const nextAnnotations = session.baseAnnotations.filter((ann) => !session.deletedIds.has(ann.id));
+    pushState(nextAnnotations, pages);
   }
 
   function handleSignatureApply(dataUrl: string, options: { color: string; strokeWidth: number }) {
@@ -441,7 +586,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   function startDrag(id: string, e: React.PointerEvent) {
     if (activeTool !== "select") return;
     const ann = annotations.find((a) => a.id === id);
-    if (!ann || ann.kind === "watermark") return;
+    if (!ann || !isBoxAnnotation(ann)) return;
     if (ann.kind === "text" && e.detail >= 2) {
       e.stopPropagation();
       setSelectedId(id);
@@ -462,7 +607,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     const dx = (e.clientX - dragState.startX) / rect.width;
     const dy = (e.clientY - dragState.startY) / rect.height;
     setAnnotations((a) => a.map((an) =>
-      an.id === dragState.id && an.kind !== "watermark" ? { ...an, x: clamp(dragState.origX + dx, 0, 1), y: clamp(dragState.origY + dy, 0, 1) } : an
+      an.id === dragState.id && isBoxAnnotation(an) ? { ...an, x: clamp(dragState.origX + dx, 0, 1), y: clamp(dragState.origY + dy, 0, 1) } : an
     ));
   }
 
@@ -477,7 +622,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     e.preventDefault(); e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const ann = annotations.find((a) => a.id === id);
-    if (!ann || ann.kind === "watermark") return;
+    if (!ann || !isBoxAnnotation(ann)) return;
     setResizeState({ id, startX: e.clientX, startY: e.clientY, origW: ann.w, origH: ann.h, origX: ann.x, origY: ann.y, handle });
   }
 
@@ -490,7 +635,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     const dy = (e.clientY - resizeState.startY) / rect.height;
     
     setAnnotations((a) => a.map((an) => {
-      if (an.id !== resizeState.id || an.kind === "watermark") return an;
+      if (an.id !== resizeState.id || !isBoxAnnotation(an)) return an;
       let newW = resizeState.origW;
       let newH = resizeState.origH;
       let newX = resizeState.origX;
@@ -523,7 +668,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     e.preventDefault(); e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const ann = annotations.find((a) => a.id === id);
-    if (!ann || ann.kind === "watermark") return;
+    if (!ann || !isBoxAnnotation(ann)) return;
     const el = pageRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -541,7 +686,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
     const delta = (angle2 - angle1) * (180 / Math.PI);
     
     setAnnotations((a) => a.map((an) =>
-      an.id === rotateState.id && an.kind !== "watermark" ? { ...an, rotation: rotateState.origRot + delta } : an
+      an.id === rotateState.id && isBoxAnnotation(an) ? { ...an, rotation: rotateState.origRot + delta } : an
     ));
   }
 
@@ -591,6 +736,10 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                 }
              }
              ctx.restore();
+          } else if (ann.kind === "ink") {
+            ctx.save();
+            drawInkPath(ctx, ann, w, h);
+            ctx.restore();
           } else {
             ctx.save();
             ctx.translate(ann.x * w, ann.y * h);
@@ -716,7 +865,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
         </div>
       ) : (
         <div className="flex flex-1 overflow-hidden bg-slate-100">
-          <aside className="hidden w-48 shrink-0 overflow-y-auto border-r border-blue-100 bg-blue-50/70 p-4 md:block">
+          <aside className="hidden w-52 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-4 md:block">
             <div className="flex flex-col items-center gap-4">
               <DndContext sensors={pageSortSensors} collisionDetection={closestCenter} onDragEnd={handlePageSortEnd}>
                 <SortableContext items={pages.map((pg) => pg.id)} strategy={verticalListSortingStrategy}>
@@ -737,7 +886,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-2xl leading-none text-white shadow-sm hover:bg-blue-600"
+                className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-2xl leading-none text-white shadow-sm transition hover:bg-blue-700"
                 aria-label="Add PDF"
               >
                 +
@@ -748,6 +897,8 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
           <div className="flex min-w-0 flex-1 flex-col">
             <AdvancedToolbar
               activeTool={activeTool} setActiveTool={handleToolChange}
+              drawMode={drawMode} setDrawMode={setDrawMode}
+              drawSettings={drawSettings} setDrawSettings={setDrawSettings}
               onRotatePage={rotatePage} onDeletePage={deletePage}
               onAddPageNumbers={addPageNumbers} onDownload={exportPdf}
               onUpload={() => fileInputRef.current?.click()}
@@ -762,7 +913,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
             />
 
             {/* Main page view */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 sm:p-6">
             {isLoading ? (
               <div className="flex h-64 flex-col items-center justify-center gap-3">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600"></div>
@@ -772,12 +923,20 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
               <>
                 {/* Page canvas */}
                 <div className="mx-auto w-full max-w-[900px] select-none">
-                  <div ref={pageRef} className="relative overflow-hidden bg-white shadow-xl ring-1 ring-slate-200 touch-none"
+                  <div ref={pageRef} className={`relative overflow-hidden bg-white shadow-xl ring-1 ring-slate-200 touch-none ${
+                    activeTool === "pan"
+                      ? "cursor-grab active:cursor-grabbing"
+                      : activeTool === "draw"
+                        ? drawMode === "eraser" ? "cursor-cell" : "cursor-crosshair"
+                        : "cursor-default"
+                  }`}
                     style={{ aspectRatio: page!.rotation % 180 !== 0 ? `${page!.height}/${page!.width}` : `${page!.width}/${page!.height}` }}
                     onClick={handlePageClick}
                     onContextMenu={handlePageContextMenu}
-                    onPointerDown={handleHighlightDown} onPointerMove={(e) => { handleHighlightMove(e); onDragMove(e); onResizeMove(e); onRotateMove(e); }}
-                    onPointerUp={() => { handleHighlightUp(); onDragEnd(); onResizeEnd(); onRotateEnd(); }}>
+                    onPointerDown={(e) => { handlePanDown(e); handleDrawDown(e); }}
+                    onPointerMove={(e) => { handlePanMove(e); handleDrawMove(e); onDragMove(e); onResizeMove(e); onRotateMove(e); }}
+                    onPointerUp={() => { handlePanUp(); handleDrawUp(); onDragEnd(); onResizeEnd(); onRotateEnd(); }}
+                    onPointerCancel={() => { handlePanUp(); finishEraseDraw(); setHighlightDraw(null); setInkDraw(null); onDragEnd(); onResizeEnd(); onRotateEnd(); }}>
                     
                     <img src={page!.dataUrl} alt={`Page ${currentPage + 1}`}
                       className="h-full w-full object-contain pointer-events-none"
@@ -798,20 +957,67 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
                     {/* Highlight drawing preview */}
                     {highlightDraw && (
-                      <div className="absolute bg-yellow-300/40 border border-yellow-400 pointer-events-none" style={{
+                      <div className="absolute pointer-events-none border" style={{
                         left: `${Math.min(highlightDraw.startX, highlightDraw.curX) * 100}%`,
                         top: `${Math.min(highlightDraw.startY, highlightDraw.curY) * 100}%`,
                         width: `${Math.abs(highlightDraw.curX - highlightDraw.startX) * 100}%`,
                         height: `${Math.abs(highlightDraw.curY - highlightDraw.startY) * 100}%`,
+                        backgroundColor: drawSettings.highlighterColor,
+                        borderColor: drawSettings.highlighterColor,
+                        opacity: drawSettings.highlighterOpacity,
                       }} />
                     )}
 
+                    <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      {annotations
+                        .filter((a): a is Extract<AdvancedAnnotation, { kind: "ink" }> => a.pageIndex === currentPage && a.kind === "ink")
+                        .map((ann) => (
+                          <path
+                            key={ann.id}
+                            d={pointsToSvgPath(ann.points)}
+                            fill="none"
+                            stroke={ann.color}
+                            strokeOpacity={ann.opacity}
+                            strokeWidth={ann.strokeWidth}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        ))}
+                      {inkDraw && (
+                        <path
+                          d={pointsToSvgPath(inkDraw.points)}
+                          fill="none"
+                          stroke={drawSettings.penColor}
+                          strokeWidth={drawSettings.penSize}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+                      {activeTool === "draw" && drawMode === "eraser" && eraserPreview && (
+                        <circle
+                          cx={eraserPreview.x * 100}
+                          cy={eraserPreview.y * 100}
+                          r={getEraserRadius(drawSettings.eraserSize) * 100}
+                          fill="rgba(255,255,255,0.45)"
+                          stroke="#2563eb"
+                          strokeWidth={1}
+                          strokeDasharray="3 2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+                    </svg>
+
                     {/* Render annotations */}
-                    {annotations.filter((a) => a.pageIndex === currentPage && a.kind !== "watermark").map((ann) => {
-                      if (ann.kind === "watermark") return null;
+                    {annotations.filter((a): a is Extract<AdvancedAnnotation, { kind: "text" | "highlight" | "signature" }> =>
+                      a.pageIndex === currentPage && isBoxAnnotation(a)
+                    ).map((ann) => {
                       const isSelected = selectedId === ann.id;
                       return (
-                        <div key={ann.id} data-annotation-id={ann.id} className={`annotation-layer group absolute cursor-move border ${isSelected ? `border-blue-400 ${ann.kind === "text" ? "bg-sky-50/70" : ""}` : "border-transparent hover:border-blue-300/80"}`}
+                        <div key={ann.id} data-annotation-id={ann.id} className={`annotation-layer group absolute border ${
+                          activeTool === "select" ? "cursor-move pointer-events-auto" : "pointer-events-none"
+                        } ${isSelected ? `border-blue-400 ${ann.kind === "text" ? "bg-sky-50/70" : ""}` : "border-transparent hover:border-blue-300/80"}`}
                           style={{
                             left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
                             width: `${ann.w * 100}%`, height: `${ann.h * 100}%`,
@@ -895,18 +1101,18 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); deleteAnnotation(ann.id); }}
                                 onPointerDown={(e) => e.stopPropagation()}
-                                className="absolute left-1/2 top-[calc(100%+14px)] z-20 flex h-12 w-14 -translate-x-1/2 items-center justify-center rounded bg-[#001b53] text-xl text-white shadow-lg"
+                                className="absolute left-1/2 top-[calc(100%+14px)] z-20 flex h-11 w-12 -translate-x-1/2 items-center justify-center rounded-md bg-[#001b53] text-white shadow-lg transition hover:bg-[#00266f]"
                                 aria-label="Delete annotation"
                               >
-                                🗑
+                                <TrashMiniIcon />
                               </button>
                               <button
                                 type="button"
                                 onPointerDown={(e) => startRotate(ann.id, e)}
-                                className="absolute left-[calc(100%+48px)] top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border-2 border-blue-400 bg-white text-lg text-blue-500 shadow-sm"
+                                className="absolute left-[calc(100%+48px)] top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border-2 border-blue-400 bg-white text-blue-500 shadow-sm transition hover:bg-blue-50"
                                 aria-label="Rotate annotation"
                               >
-                                ↻
+                                <RotateMiniIcon />
                               </button>
                             </>
                           )}
@@ -985,8 +1191,8 @@ function SortablePageThumbnail({
           compact
             ? `rounded-xl border-2 ${active ? "scale-105 border-blue-500 shadow-md" : "border-slate-200 hover:border-blue-300"}`
             : active
-              ? "ring-2 ring-blue-500"
-              : "ring-1 ring-slate-200 hover:ring-blue-300"
+              ? "rounded-md ring-2 ring-blue-500 shadow-md"
+              : "rounded-md ring-1 ring-slate-200 hover:ring-blue-300"
         }`}
         style={thumbSize}
         aria-label={`Move or select page ${index + 1}`}
@@ -1019,7 +1225,7 @@ function SortablePageThumbnail({
           }
           aria-label={`Move page ${index + 1} up`}
         >
-          {"<"}
+          <ChevronMiniIcon dir="left" />
         </button>
         <span className={compact ? "text-[10px] font-semibold text-slate-500" : "text-sm font-semibold text-slate-900"}>
           {index + 1}
@@ -1035,7 +1241,7 @@ function SortablePageThumbnail({
           }
           aria-label={`Move page ${index + 1} down`}
         >
-          {">"}
+          <ChevronMiniIcon dir="right" />
         </button>
       </div>
     </div>
@@ -1044,10 +1250,104 @@ function SortablePageThumbnail({
 
 function clamp(n: number, min: number, max: number) { return Math.min(max, Math.max(min, n)); }
 
+function getEraserRadius(size: number) {
+  return clamp(size / 1400, 0.006, 0.06);
+}
+
+function isBoxAnnotation(ann: AdvancedAnnotation): ann is Extract<AdvancedAnnotation, { kind: "text" | "highlight" | "signature" }> {
+  return ann.kind === "text" || ann.kind === "highlight" || ann.kind === "signature";
+}
+
 function labelForAnnotation(ann: EditableAnnotation) {
   if (ann.kind === "text") return "Text box";
   if (ann.kind === "signature") return "Signature";
+  if (ann.kind === "ink") return "Drawing";
   return "Highlight";
+}
+
+function isAnnotationAtPoint(ann: EditableAnnotation, rx: number, ry: number, radius: number) {
+  if (ann.kind === "ink") {
+    return ann.points.some((point, index) => {
+      if (index === 0) return Math.hypot(point.x - rx, point.y - ry) <= radius;
+      return distanceToSegment({ x: rx, y: ry }, ann.points[index - 1], point) <= radius;
+    });
+  }
+  return (
+    rx >= ann.x - ann.w / 2 - radius &&
+    rx <= ann.x + ann.w / 2 + radius &&
+    ry >= ann.y - ann.h / 2 - radius &&
+    ry <= ann.y + ann.h / 2 + radius
+  );
+}
+
+function distanceToSegment(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+  const t = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSq, 0, 1);
+  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+}
+
+function pointsToSvgPath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return "";
+  const [first, ...rest] = points;
+  return [`M ${first.x * 100} ${first.y * 100}`, ...rest.map((point) => `L ${point.x * 100} ${point.y * 100}`)].join(" ");
+}
+
+function drawInkPath(
+  ctx: CanvasRenderingContext2D,
+  ann: Extract<AdvancedAnnotation, { kind: "ink" }>,
+  pageW: number,
+  pageH: number
+) {
+  if (ann.points.length < 2) return;
+  ctx.save();
+  ctx.globalAlpha = ann.opacity;
+  ctx.strokeStyle = ann.color;
+  ctx.lineWidth = Math.max(1, ann.strokeWidth * (pageW / 800));
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(ann.points[0].x * pageW, ann.points[0].y * pageH);
+  ann.points.slice(1).forEach((point) => {
+    ctx.lineTo(point.x * pageW, point.y * pageH);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function TrashMiniIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h16" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M6 7l1 14h10l1-14" />
+      <path d="M9 7V4h6v3" />
+    </svg>
+  );
+}
+
+function RotateMiniIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 4h4v4" />
+      <path d="M20 8a8 8 0 1 1-2.3-5.7" />
+    </svg>
+  );
+}
+
+function ChevronMiniIcon({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {dir === "left" ? <path d="M12 5l-5 5 5 5" /> : <path d="M8 5l5 5-5 5" />}
+    </svg>
+  );
 }
 
 function drawTextBox(

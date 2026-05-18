@@ -67,6 +67,7 @@ export type SignatureStamp = {
 export type AdvancedAnnotation =
   | { kind: "text"; id: string; pageIndex: number; x: number; y: number; w: number; h: number; rotation: number; text: string; fontSize: number; fontFamily: string; color: string; bold: boolean; italic: boolean }
   | { kind: "highlight"; id: string; pageIndex: number; x: number; y: number; w: number; h: number; rotation: number; color: string; opacity: number }
+  | { kind: "ink"; id: string; pageIndex: number; points: { x: number; y: number }[]; color: string; opacity: number; strokeWidth: number }
   | { kind: "signature"; id: string; pageIndex: number; x: number; y: number; w: number; h: number; rotation: number; dataUrl: string; opacity: number; color: string; strokeWidth: number }
   | { kind: "watermark"; id: string; pageIndex: number; text: string; opacity: number };
 

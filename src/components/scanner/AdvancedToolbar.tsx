@@ -1,12 +1,25 @@
 "use client";
 
+import type { ReactElement, ReactNode } from "react";
 import type { AdvancedAnnotation } from "./types";
 
-export type Tool = "select" | "text" | "highlight" | "signature" | "watermark";
+export type Tool = "pan" | "select" | "text" | "draw" | "signature" | "watermark";
+export type DrawMode = "pen" | "highlighter" | "eraser";
+export type DrawSettings = {
+  penColor: string;
+  penSize: number;
+  highlighterColor: string;
+  highlighterOpacity: number;
+  eraserSize: number;
+};
 
 type Props = {
   activeTool: Tool;
   setActiveTool: (t: Tool) => void;
+  drawMode: DrawMode;
+  setDrawMode: (m: DrawMode) => void;
+  drawSettings: DrawSettings;
+  setDrawSettings: (settings: DrawSettings) => void;
   onRotatePage: (dir: 1 | -1) => void;
   onDeletePage: () => void;
   onAddPageNumbers: () => void;
@@ -26,13 +39,7 @@ type Props = {
   onUpdateAnnotation?: (id: string, updates: Partial<AdvancedAnnotation>) => void;
 };
 
-const tools: { id: Tool; label: string; icon: string }[] = [
-  { id: "select", label: "Select", icon: "👆" },
-  { id: "text", label: "Add Text", icon: "T" },
-  { id: "highlight", label: "Highlight", icon: "🖍" },
-  { id: "signature", label: "Signature", icon: "✍️" },
-  { id: "watermark", label: "Watermark", icon: "💧" },
-];
+type IconProps = { className?: string };
 
 const fontOptions = [
   { label: "Arial", value: "Arial, Helvetica, sans-serif" },
@@ -43,19 +50,63 @@ const fontOptions = [
   { label: "Montserrat", value: "Montserrat, Arial, Helvetica, sans-serif" },
 ];
 
+const tools: { id: Tool; label: string; icon: (props: IconProps) => ReactElement }[] = [
+  { id: "pan", label: "Pan (P)", icon: HandIcon },
+  { id: "select", label: "Select (Esc)", icon: CursorIcon },
+  { id: "text", label: "Add text", icon: TextIcon },
+  { id: "draw", label: "Draw", icon: PencilIcon },
+  { id: "signature", label: "Signature", icon: SignatureIcon },
+  { id: "watermark", label: "Watermark", icon: DropIcon },
+];
+
+const drawModes: { id: DrawMode; label: string; icon: (props: IconProps) => ReactElement }[] = [
+  { id: "pen", label: "Pen", icon: PencilIcon },
+  { id: "highlighter", label: "Highlighter", icon: HighlighterIcon },
+  { id: "eraser", label: "Eraser", icon: EraserIcon },
+];
+
 export default function AdvancedToolbar({
-  activeTool, setActiveTool, onRotatePage, onDeletePage,
-  onAddPageNumbers, onDownload, onUpload, isExporting,
-  hasPages, pageCount, annotations, onDeleteAnnotation, selectedAnnotationId,
-  canUndo, canRedo, undo, redo, onUpdateAnnotation
+  activeTool,
+  setActiveTool,
+  drawMode,
+  setDrawMode,
+  drawSettings,
+  setDrawSettings,
+  onRotatePage,
+  onDeletePage,
+  onAddPageNumbers,
+  onDownload,
+  onUpload,
+  isExporting,
+  hasPages,
+  pageCount,
+  annotations,
+  onDeleteAnnotation,
+  selectedAnnotationId,
+  canUndo,
+  canRedo,
+  undo,
+  redo,
+  onUpdateAnnotation,
 }: Props) {
   const selectedAnn = annotations.find((a) => a.id === selectedAnnotationId);
+  const updateDrawSettings = (updates: Partial<DrawSettings>) => setDrawSettings({ ...drawSettings, ...updates });
+  const drawColor = drawMode === "highlighter" ? drawSettings.highlighterColor : drawSettings.penColor;
+  const drawRangeValue =
+    drawMode === "eraser"
+      ? drawSettings.eraserSize
+      : drawMode === "highlighter"
+        ? Math.round(drawSettings.highlighterOpacity * 100)
+        : drawSettings.penSize;
 
   if (!hasPages) {
     return (
       <div className="flex items-center justify-center p-3">
-        <button type="button" onClick={onUpload}
-          className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition">
+        <button
+          type="button"
+          onClick={onUpload}
+          className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
           Upload PDF
         </button>
       </div>
@@ -64,82 +115,123 @@ export default function AdvancedToolbar({
 
   return (
     <div className="flex min-h-16 items-center justify-center border-b border-blue-100 bg-slate-50/95 px-3 py-2">
-      <div className="flex max-w-full items-center overflow-x-auto rounded-sm border border-blue-200 bg-white text-slate-900 shadow-[0_2px_8px_rgba(37,99,235,0.2)]">
-        <div className="flex items-center">
-          {tools.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActiveTool(t.id)}
-              title={t.label}
-              className={`flex h-10 min-w-10 items-center justify-center border-r border-slate-200 px-3 text-sm font-semibold transition ${
-                activeTool === t.id ? "bg-blue-50 text-blue-600" : "bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              {t.id === "text" ? "T" : t.icon}
-            </button>
+      <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-blue-200 bg-white p-1 text-slate-900 shadow-[0_2px_10px_rgba(37,99,235,0.16)]">
+        <div className="flex items-center overflow-hidden rounded-md border border-slate-200">
+          {tools.map((tool) => (
+            <ToolbarButton
+              key={tool.id}
+              active={activeTool === tool.id}
+              title={tool.label}
+              onClick={() => setActiveTool(tool.id)}
+              icon={tool.icon}
+            />
           ))}
         </div>
 
-        <div className="flex items-center border-r border-slate-200">
-          <button type="button" onClick={undo} disabled={!canUndo} title="Undo"
-            className="flex h-10 w-10 items-center justify-center text-sm text-slate-700 hover:bg-slate-50 disabled:text-slate-300">
-            ↶
-          </button>
-          <button type="button" onClick={redo} disabled={!canRedo} title="Redo"
-            className="flex h-10 w-10 items-center justify-center text-sm text-slate-700 hover:bg-slate-50 disabled:text-slate-300">
-            ↷
-          </button>
+        {activeTool === "draw" && (
+          <div className="flex items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+            {drawModes.map((mode) => (
+              <ToolbarButton
+                key={mode.id}
+                active={drawMode === mode.id}
+                title={mode.label}
+                onClick={() => setDrawMode(mode.id)}
+                icon={mode.icon}
+              />
+            ))}
+            {drawMode !== "eraser" && (
+              <ColorInput
+                value={drawColor}
+                onChange={(color) =>
+                  updateDrawSettings(drawMode === "highlighter" ? { highlighterColor: color } : { penColor: color })
+                }
+                label={drawMode === "highlighter" ? "Highlighter color" : "Pen color"}
+              />
+            )}
+            <label className="flex h-10 items-center gap-2 border-r border-slate-200 px-3" title={drawMode === "highlighter" ? "Highlighter opacity" : drawMode === "eraser" ? "Eraser size" : "Pen size"}>
+              <input
+                type="range"
+                min={drawMode === "highlighter" ? 10 : drawMode === "eraser" ? 8 : 1}
+                max={drawMode === "highlighter" ? 80 : drawMode === "eraser" ? 72 : 16}
+                step={drawMode === "highlighter" ? 5 : 1}
+                value={drawRangeValue}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (drawMode === "eraser") updateDrawSettings({ eraserSize: value });
+                  else if (drawMode === "highlighter") updateDrawSettings({ highlighterOpacity: value / 100 });
+                  else updateDrawSettings({ penSize: value });
+                }}
+                className="h-2 w-24 accent-blue-600"
+                aria-label={drawMode === "highlighter" ? "Highlighter opacity" : drawMode === "eraser" ? "Eraser size" : "Pen size"}
+              />
+              <span className="w-8 text-right text-xs font-semibold text-slate-500">{drawRangeValue}</span>
+            </label>
+          </div>
+        )}
+
+        <div className="flex items-center overflow-hidden rounded-md border border-slate-200">
+          <IconButton onClick={undo} disabled={!canUndo} title="Undo" icon={UndoIcon} />
+          <IconButton onClick={redo} disabled={!canRedo} title="Redo" icon={RedoIcon} />
         </div>
 
-        <div className="flex items-center border-r border-slate-200">
-          <button type="button" onClick={() => onRotatePage(-1)} title="Rotate left"
-            className="flex h-10 w-10 items-center justify-center text-sm text-slate-700 hover:bg-slate-50">
-            ↶
-          </button>
-          <button type="button" onClick={() => onRotatePage(1)} title="Rotate right"
-            className="flex h-10 w-10 items-center justify-center text-sm text-slate-700 hover:bg-slate-50">
-            ↷
-          </button>
-          <button type="button" onClick={onDeletePage} disabled={pageCount <= 1} title="Delete page"
-            className="flex h-10 w-10 items-center justify-center text-sm text-red-600 hover:bg-red-50 disabled:text-slate-300">
-            🗑
-          </button>
-          <button type="button" onClick={onAddPageNumbers} title="Page numbers"
-            className="flex h-10 min-w-10 items-center justify-center px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        <div className="flex items-center overflow-hidden rounded-md border border-slate-200">
+          <IconButton onClick={() => onRotatePage(-1)} title="Rotate left" icon={RotateLeftIcon} />
+          <IconButton onClick={() => onRotatePage(1)} title="Rotate right" icon={RotateRightIcon} />
+          <IconButton onClick={onDeletePage} disabled={pageCount <= 1} title="Delete page" icon={TrashIcon} danger />
+          <button
+            type="button"
+            onClick={onAddPageNumbers}
+            title="Page numbers"
+            className="flex h-10 min-w-10 items-center justify-center px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
             #
           </button>
         </div>
 
         {selectedAnn && selectedAnn.kind === "text" && onUpdateAnnotation && (
           <div className="flex items-center">
-                <select
-                  value={selectedAnn.fontFamily || fontOptions[0].value}
-                  onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontFamily: e.target.value })}
+            <select
+              value={selectedAnn.fontFamily || fontOptions[0].value}
+              onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontFamily: e.target.value })}
               className="h-10 min-w-48 border-r border-slate-200 bg-white px-4 text-center text-sm outline-none"
-                  aria-label="Font family"
-                >
-                  {fontOptions.map((font) => (
-                    <option key={font.value} value={font.value}>
-                      {font.label}
-                    </option>
-                  ))}
-                </select>
-            <input type="number" min="8" max="120" value={selectedAnn.fontSize || 16}
-                  onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontSize: parseInt(e.target.value) || 16 })}
-              className="h-10 w-16 border-r border-slate-200 bg-white px-2 text-center text-sm outline-none" />
-            <label className="flex h-10 w-14 items-center justify-center border-r border-slate-200">
-              <span className="h-5 w-5 rounded-full border border-slate-200" style={{ backgroundColor: selectedAnn.color || "#1e293b" }} />
-              <input type="color" value={selectedAnn.color || "#1e293b"}
-                  onChange={(e) => onUpdateAnnotation(selectedAnn.id, { color: e.target.value })}
-                className="sr-only" />
-            </label>
-            <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { bold: !selectedAnn.bold })}
-              className={`flex h-10 w-12 items-center justify-center border-r border-slate-200 text-lg font-bold ${selectedAnn.bold ? "bg-blue-50 text-blue-600" : "hover:bg-slate-50"}`}>
+              aria-label="Font family"
+            >
+              {fontOptions.map((font) => (
+                <option key={font.value} value={font.value}>
+                  {font.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min="8"
+              max="120"
+              value={selectedAnn.fontSize || 16}
+              onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontSize: parseInt(e.target.value) || 16 })}
+              className="h-10 w-16 border-r border-slate-200 bg-white px-2 text-center text-sm outline-none"
+              aria-label="Font size"
+            />
+            <ColorInput
+              value={selectedAnn.color || "#1e293b"}
+              onChange={(color) => onUpdateAnnotation(selectedAnn.id, { color })}
+              label="Text color"
+            />
+            <button
+              type="button"
+              onClick={() => onUpdateAnnotation(selectedAnn.id, { bold: !selectedAnn.bold })}
+              className={`flex h-10 w-12 items-center justify-center border-r border-slate-200 text-lg font-bold ${
+                selectedAnn.bold ? "bg-blue-50 text-blue-600" : "hover:bg-slate-50"
+              }`}
+            >
               B
             </button>
-            <button type="button" onClick={() => onUpdateAnnotation(selectedAnn.id, { italic: !selectedAnn.italic })}
-              className={`flex h-10 w-12 items-center justify-center border-r border-slate-200 font-serif text-lg italic ${selectedAnn.italic ? "bg-blue-50 text-blue-600" : "hover:bg-slate-50"}`}>
+            <button
+              type="button"
+              onClick={() => onUpdateAnnotation(selectedAnn.id, { italic: !selectedAnn.italic })}
+              className={`flex h-10 w-12 items-center justify-center border-r border-slate-200 font-serif text-lg italic ${
+                selectedAnn.italic ? "bg-blue-50 text-blue-600" : "hover:bg-slate-50"
+              }`}
+            >
               I
             </button>
           </div>
@@ -147,12 +239,11 @@ export default function AdvancedToolbar({
 
         {selectedAnn && selectedAnn.kind === "signature" && onUpdateAnnotation && (
           <div className="flex items-center">
-            <label className="flex h-10 w-14 items-center justify-center border-r border-slate-200">
-              <span className="h-5 w-5 rounded-full border border-slate-200" style={{ backgroundColor: selectedAnn.color || "#1a1a2e" }} />
-              <input type="color" value={selectedAnn.color || "#1a1a2e"}
-                onChange={(e) => onUpdateAnnotation(selectedAnn.id, { color: e.target.value })}
-                className="sr-only" />
-            </label>
+            <ColorInput
+              value={selectedAnn.color || "#1a1a2e"}
+              onChange={(color) => onUpdateAnnotation(selectedAnn.id, { color })}
+              label="Signature color"
+            />
             <input
               type="number"
               min={1}
@@ -167,22 +258,225 @@ export default function AdvancedToolbar({
         )}
 
         {selectedAnnotationId && (
-          <button type="button" onClick={() => onDeleteAnnotation(selectedAnnotationId)}
-            className="flex h-10 w-10 items-center justify-center border-r border-slate-200 text-red-600 hover:bg-red-50"
-            title="Delete annotation">
-            🗑
-          </button>
+          <IconButton
+            onClick={() => onDeleteAnnotation(selectedAnnotationId)}
+            title="Delete annotation"
+            icon={TrashIcon}
+            danger
+          />
         )}
 
-        <button type="button" onClick={onUpload}
-          className="flex h-10 items-center justify-center border-r border-slate-200 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-50">
-          Add
-        </button>
-        <button type="button" onClick={onDownload} disabled={isExporting}
-          className="flex h-10 items-center justify-center px-4 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:text-slate-300">
-          {isExporting ? "Exporting" : "Download"}
-        </button>
+        <div className="flex items-center overflow-hidden rounded-md border border-slate-200">
+          <button
+            type="button"
+            onClick={onUpload}
+            className="flex h-10 items-center justify-center border-r border-slate-200 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-50"
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={isExporting}
+            className="flex h-10 items-center justify-center px-4 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:text-slate-300"
+          >
+            {isExporting ? "Exporting" : "Download"}
+          </button>
+        </div>
       </div>
     </div>
+  );
+}
+
+function ToolbarButton({
+  active,
+  title,
+  onClick,
+  icon: Icon,
+}: {
+  active: boolean;
+  title: string;
+  onClick: () => void;
+  icon: (props: IconProps) => ReactElement;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`flex h-10 min-w-10 items-center justify-center border-r border-slate-200 px-3 transition last:border-r-0 ${
+        active ? "bg-blue-100 text-blue-700" : "bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      <Icon className="h-5 w-5" />
+    </button>
+  );
+}
+
+function IconButton({
+  onClick,
+  disabled,
+  title,
+  icon: Icon,
+  danger = false,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  title: string;
+  icon: (props: IconProps) => ReactElement;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`flex h-10 w-10 items-center justify-center border-r border-slate-200 last:border-r-0 hover:bg-slate-50 disabled:text-slate-300 ${
+        danger ? "text-red-600 hover:bg-red-50" : "text-slate-700"
+      }`}
+    >
+      <Icon className="h-5 w-5" />
+    </button>
+  );
+}
+
+function ColorInput({ value, onChange, label }: { value: string; onChange: (color: string) => void; label: string }) {
+  return (
+    <label className="flex h-10 w-14 items-center justify-center border-r border-slate-200" title={label}>
+      <span className="h-5 w-5 rounded-full border border-slate-200" style={{ backgroundColor: value }} />
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="sr-only" />
+    </label>
+  );
+}
+
+function SvgRoot({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+function HandIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11" />
+      <path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11" />
+      <path d="M14 11V6.5a1.5 1.5 0 0 1 3 0V13" />
+      <path d="M17 13v-1.5a1.5 1.5 0 0 1 3 0v3.2c0 4-2.6 6.3-6.4 6.3h-2.2a6 6 0 0 1-5-2.7L4 14.8a1.7 1.7 0 0 1 2.8-1.9L8 14.4" />
+    </SvgRoot>
+  );
+}
+
+function CursorIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M5 3l14 7-6 2.2L10.8 18 5 3z" fill="currentColor" stroke="none" />
+    </SvgRoot>
+  );
+}
+
+function TextIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M5 6h14" />
+      <path d="M12 6v12" />
+      <path d="M9 18h6" />
+    </SvgRoot>
+  );
+}
+
+function PencilIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z" />
+      <path d="M14 7l3 3" />
+    </SvgRoot>
+  );
+}
+
+function HighlighterIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M4 20h7" />
+      <path d="M7 16l-2-2 9-9 4 4-9 9-2-2z" />
+      <path d="M13 6l4 4" />
+    </SvgRoot>
+  );
+}
+
+function EraserIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M4 16l8-8a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8l-5 5H8l-4-3z" />
+      <path d="M9 19h11" />
+      <path d="M10 10l6 6" />
+    </SvgRoot>
+  );
+}
+
+function SignatureIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M4 18c2.5-5.5 4.5-8.5 6-8.5 1.2 0 .5 3.2-.5 5.1-.7 1.3-.8 2.4.3 2.4 1.4 0 2.8-2.3 4.2-2.3 1 0 .8 2.3 2.1 2.3 1 0 2.1-.7 3.9-2" />
+      <path d="M4 21h16" />
+    </SvgRoot>
+  );
+}
+
+function DropIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M12 3s6 6.2 6 11a6 6 0 0 1-12 0c0-4.8 6-11 6-11z" />
+    </SvgRoot>
+  );
+}
+
+function UndoIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M9 7H4v5" />
+      <path d="M4 12a8 8 0 0 1 13.7-4" />
+    </SvgRoot>
+  );
+}
+
+function RedoIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M15 7h5v5" />
+      <path d="M20 12A8 8 0 0 0 6.3 8" />
+    </SvgRoot>
+  );
+}
+
+function RotateLeftIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M8 4H4v4" />
+      <path d="M4 8a8 8 0 1 0 2.3-5.7" />
+    </SvgRoot>
+  );
+}
+
+function RotateRightIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M16 4h4v4" />
+      <path d="M20 8a8 8 0 1 1-2.3-5.7" />
+    </SvgRoot>
+  );
+}
+
+function TrashIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M4 7h16" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M6 7l1 14h10l1-14" />
+      <path d="M9 7V4h6v3" />
+    </SvgRoot>
   );
 }
