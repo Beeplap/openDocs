@@ -69,7 +69,8 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   const [highlightDraw, setHighlightDraw] = useState<{startX:number;startY:number;curX:number;curY:number}|null>(null);
   const [inkDraw, setInkDraw] = useState<{ points: { x: number; y: number }[] } | null>(null);
   const [eraserPreview, setEraserPreview] = useState<{ x: number; y: number } | null>(null);
-  const [panState, setPanState] = useState<{ pointerId: number; startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [panState, setPanState] = useState<{ pointerId: number; startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
   
   const pageRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -240,6 +241,7 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       setCopiedAnnotation(null);
       setContextMenu(null);
       setActiveTool("pan");
+      setPanOffset({ x: 0, y: 0 });
       setDrawSettings(DEFAULT_DRAW_SETTINGS);
       onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`);
     } catch { onStatusMessage("Failed to load PDF."); }
@@ -422,25 +424,25 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
 
   function handlePanDown(e: React.PointerEvent) {
     if (activeTool !== "pan") return;
-    const scroller = scrollContainerRef.current;
-    if (!scroller) return;
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setPanState({
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      scrollLeft: scroller.scrollLeft,
-      scrollTop: scroller.scrollTop,
+      offsetX: panOffset.x,
+      offsetY: panOffset.y,
     });
   }
 
   function handlePanMove(e: React.PointerEvent) {
     if (!panState || panState.pointerId !== e.pointerId) return;
-    const scroller = scrollContainerRef.current;
-    if (!scroller) return;
-    scroller.scrollLeft = panState.scrollLeft - (e.clientX - panState.startX);
-    scroller.scrollTop = panState.scrollTop - (e.clientY - panState.startY);
+    const dx = e.clientX - panState.startX;
+    const dy = e.clientY - panState.startY;
+    setPanOffset(clampPanOffset({
+      x: panState.offsetX + dx,
+      y: panState.offsetY + dy,
+    }, scrollContainerRef.current, pageRef.current));
   }
 
   function handlePanUp() {
@@ -922,7 +924,13 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
             ) : (
               <>
                 {/* Page canvas */}
-                <div className="mx-auto w-full max-w-[900px] select-none">
+                <div
+                  className={`mx-auto w-full max-w-[900px] select-none ${panState ? "" : "transition-transform duration-100"}`}
+                  style={{
+                    transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0)`,
+                    willChange: activeTool === "pan" ? "transform" : undefined,
+                  }}
+                >
                   <div ref={pageRef} className={`relative overflow-hidden bg-white shadow-xl ring-1 ring-slate-200 touch-none ${
                     activeTool === "pan"
                       ? "cursor-grab active:cursor-grabbing"
@@ -1249,6 +1257,20 @@ function SortablePageThumbnail({
 }
 
 function clamp(n: number, min: number, max: number) { return Math.min(max, Math.max(min, n)); }
+
+function clampPanOffset(
+  offset: { x: number; y: number },
+  scroller: HTMLDivElement | null,
+  page: HTMLDivElement | null
+) {
+  if (!scroller || !page) return offset;
+  const maxX = Math.max(80, scroller.clientWidth * 0.7, page.offsetWidth * 0.35);
+  const maxY = Math.max(80, scroller.clientHeight * 0.7, page.offsetHeight * 0.35);
+  return {
+    x: clamp(offset.x, -maxX, maxX),
+    y: clamp(offset.y, -maxY, maxY),
+  };
+}
 
 function getEraserRadius(size: number) {
   return clamp(size / 1400, 0.006, 0.06);
