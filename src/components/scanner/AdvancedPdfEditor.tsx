@@ -19,6 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import SignaturePad from "./SignaturePad";
 import AdvancedToolbar from "./AdvancedToolbar";
 import type { DrawMode, DrawSettings, Tool } from "./AdvancedToolbar";
+import type { WorkspaceIntent } from "../OpendocsWorkspace";
 import type { AdvancedAnnotation } from "./types";
 import { renderPdfAllPagesToCanvases, buildAnnotatedPdf } from "../../utils/pdfUtils";
 
@@ -39,9 +40,23 @@ const DEFAULT_DRAW_SETTINGS: DrawSettings = {
   eraserSize: 28,
 };
 
-type Props = { onStatusMessage: (msg: string) => void; };
+function initialToolForIntent(intent?: WorkspaceIntent): Tool {
+  if (intent === "add-text") return "text";
+  if (intent === "add-signature") return "signature";
+  if (intent === "add-watermark") return "watermark";
+  if (intent === "draw" || intent === "highlight" || intent === "erase") return "draw";
+  return "pan";
+}
 
-export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
+function initialDrawModeForIntent(intent?: WorkspaceIntent): DrawMode {
+  if (intent === "highlight") return "highlighter";
+  if (intent === "erase") return "eraser";
+  return "pen";
+}
+
+type Props = { onStatusMessage: (msg: string) => void; initialIntent?: WorkspaceIntent };
+
+export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Props) {
   const [pages, setPages] = useState<PageData[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [annotations, setAnnotations] = useState<AdvancedAnnotation[]>([]);
@@ -49,8 +64,8 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const [activeTool, setActiveTool] = useState<Tool>("pan");
-  const [drawMode, setDrawMode] = useState<DrawMode>("pen");
+  const [activeTool, setActiveTool] = useState<Tool>(() => initialToolForIntent(initialIntent));
+  const [drawMode, setDrawMode] = useState<DrawMode>(() => initialDrawModeForIntent(initialIntent));
   const [drawSettings, setDrawSettings] = useState<DrawSettings>(DEFAULT_DRAW_SETTINGS);
   const [sigPadOpen, setSigPadOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -240,13 +255,14 @@ export default function AdvancedPdfEditor({ onStatusMessage }: Props) {
       setEditingTextId(null);
       setCopiedAnnotation(null);
       setContextMenu(null);
-      setActiveTool("pan");
+      setActiveTool(initialToolForIntent(initialIntent));
+      setDrawMode(initialDrawModeForIntent(initialIntent));
       setPanOffset({ x: 0, y: 0 });
       setDrawSettings(DEFAULT_DRAW_SETTINGS);
       onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`);
     } catch { onStatusMessage("Failed to load PDF."); }
     finally { setIsLoading(false); }
-  }, [onStatusMessage]);
+  }, [initialIntent, onStatusMessage]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
