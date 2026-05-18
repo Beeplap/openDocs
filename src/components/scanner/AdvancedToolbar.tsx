@@ -114,9 +114,9 @@ export default function AdvancedToolbar({
   }
 
   return (
-    <div className="flex min-h-16 items-center justify-center border-b border-blue-100 bg-slate-50/95 px-3 py-2">
-      <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-blue-200 bg-white p-1 text-slate-900 shadow-[0_2px_10px_rgba(37,99,235,0.16)]">
-        <div className="flex items-center overflow-hidden rounded-md border border-slate-200">
+    <div className="flex min-h-16 items-center justify-start border-b border-blue-100 bg-slate-50/95 px-3 py-2 md:justify-center">
+      <div className="flex w-full max-w-full items-center gap-1 overflow-x-auto overscroll-x-contain rounded-lg border border-blue-200 bg-white p-1 text-slate-900 shadow-[0_2px_10px_rgba(37,99,235,0.16)] [scrollbar-width:thin] md:w-auto">
+        <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-slate-200">
           {tools.map((tool) => (
             <ToolbarButton
               key={tool.id}
@@ -129,7 +129,7 @@ export default function AdvancedToolbar({
         </div>
 
         {activeTool === "draw" && (
-          <div className="flex items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+          <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
             {drawModes.map((mode) => (
               <ToolbarButton
                 key={mode.id}
@@ -148,7 +148,7 @@ export default function AdvancedToolbar({
                 label={drawMode === "highlighter" ? "Highlighter color" : "Pen color"}
               />
             )}
-            <label className="flex h-10 items-center gap-2 border-r border-slate-200 px-3" title={drawMode === "highlighter" ? "Highlighter opacity" : drawMode === "eraser" ? "Eraser size" : "Pen size"}>
+            <label className="flex h-10 shrink-0 items-center gap-2 border-r border-slate-200 px-3" title={drawMode === "highlighter" ? "Highlighter opacity" : drawMode === "eraser" ? "Eraser size" : "Pen size"}>
               <input
                 type="range"
                 min={drawMode === "highlighter" ? 10 : drawMode === "eraser" ? 8 : 1}
@@ -169,31 +169,31 @@ export default function AdvancedToolbar({
           </div>
         )}
 
-        <div className="flex items-center overflow-hidden rounded-md border border-slate-200">
+        <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-slate-200">
           <IconButton onClick={undo} disabled={!canUndo} title="Undo" icon={UndoIcon} />
           <IconButton onClick={redo} disabled={!canRedo} title="Redo" icon={RedoIcon} />
         </div>
 
-        <div className="flex items-center overflow-hidden rounded-md border border-slate-200">
-          <IconButton onClick={() => onRotatePage(-1)} title="Rotate left" icon={RotateLeftIcon} />
-          <IconButton onClick={() => onRotatePage(1)} title="Rotate right" icon={RotateRightIcon} />
+        <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-slate-200">
+          <IconButton onClick={() => onRotatePage(-1)} title="Rotate page left" icon={PageRotateLeftIcon} />
+          <IconButton onClick={() => onRotatePage(1)} title="Rotate page right" icon={PageRotateRightIcon} />
           <IconButton onClick={onDeletePage} disabled={pageCount <= 1} title="Delete page" icon={TrashIcon} danger />
           <button
             type="button"
             onClick={onAddPageNumbers}
             title="Page numbers"
-            className="flex h-10 min-w-10 items-center justify-center px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="flex h-10 min-w-10 shrink-0 items-center justify-center px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             #
           </button>
         </div>
 
         {selectedAnn && selectedAnn.kind === "text" && onUpdateAnnotation && (
-          <div className="flex items-center">
+          <div className="flex shrink-0 items-center">
             <select
               value={selectedAnn.fontFamily || fontOptions[0].value}
               onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontFamily: e.target.value })}
-              className="h-10 min-w-48 border-r border-slate-200 bg-white px-4 text-center text-sm outline-none"
+              className="h-10 min-w-48 shrink-0 border-r border-slate-200 bg-white px-4 text-center text-sm outline-none"
               aria-label="Font family"
             >
               {fontOptions.map((font) => (
@@ -208,7 +208,7 @@ export default function AdvancedToolbar({
               max="120"
               value={selectedAnn.fontSize || 16}
               onChange={(e) => onUpdateAnnotation(selectedAnn.id, { fontSize: parseInt(e.target.value) || 16 })}
-              className="h-10 w-16 border-r border-slate-200 bg-white px-2 text-center text-sm outline-none"
+              className="h-10 w-16 shrink-0 border-r border-slate-200 bg-white px-2 text-center text-sm outline-none"
               aria-label="Font size"
             />
             <ColorInput
@@ -219,7 +219,7 @@ export default function AdvancedToolbar({
             <button
               type="button"
               onClick={() => onUpdateAnnotation(selectedAnn.id, { bold: !selectedAnn.bold })}
-              className={`flex h-10 w-12 items-center justify-center border-r border-slate-200 text-lg font-bold ${
+              className={`flex h-10 w-12 shrink-0 items-center justify-center border-r border-slate-200 text-lg font-bold ${
                 selectedAnn.bold ? "bg-blue-50 text-blue-600" : "hover:bg-slate-50"
               }`}
             >
@@ -228,7 +228,7 @@ export default function AdvancedToolbar({
             <button
               type="button"
               onClick={() => onUpdateAnnotation(selectedAnn.id, { italic: !selectedAnn.italic })}
-              className={`flex h-10 w-12 items-center justify-center border-r border-slate-200 font-serif text-lg italic ${
+              className={`flex h-10 w-12 shrink-0 items-center justify-center border-r border-slate-200 font-serif text-lg italic ${
                 selectedAnn.italic ? "bg-blue-50 text-blue-600" : "hover:bg-slate-50"
               }`}
             >
@@ -238,7 +238,7 @@ export default function AdvancedToolbar({
         )}
 
         {selectedAnn && selectedAnn.kind === "signature" && onUpdateAnnotation && (
-          <div className="flex items-center">
+          <div className="flex shrink-0 items-center">
             <ColorInput
               value={selectedAnn.color || "#1a1a2e"}
               onChange={(color) => onUpdateAnnotation(selectedAnn.id, { color })}
@@ -251,7 +251,7 @@ export default function AdvancedToolbar({
               step={0.5}
               value={selectedAnn.strokeWidth || 3}
               onChange={(e) => onUpdateAnnotation(selectedAnn.id, { strokeWidth: parseFloat(e.target.value) || 3 })}
-              className="h-10 w-16 border-r border-slate-200 bg-white px-2 text-center text-sm outline-none"
+              className="h-10 w-16 shrink-0 border-r border-slate-200 bg-white px-2 text-center text-sm outline-none"
               aria-label="Signature line size"
             />
           </div>
@@ -266,11 +266,11 @@ export default function AdvancedToolbar({
           />
         )}
 
-        <div className="flex items-center overflow-hidden rounded-md border border-slate-200">
+        <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-slate-200">
           <button
             type="button"
             onClick={onUpload}
-            className="flex h-10 items-center justify-center border-r border-slate-200 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-50"
+            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-50"
           >
             Add
           </button>
@@ -278,7 +278,7 @@ export default function AdvancedToolbar({
             type="button"
             onClick={onDownload}
             disabled={isExporting}
-            className="flex h-10 items-center justify-center px-4 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:text-slate-300"
+            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap px-4 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:text-slate-300"
           >
             {isExporting ? "Exporting" : "Download"}
           </button>
@@ -304,7 +304,7 @@ function ToolbarButton({
       type="button"
       onClick={onClick}
       title={title}
-      className={`flex h-10 min-w-10 items-center justify-center border-r border-slate-200 px-3 transition last:border-r-0 ${
+      className={`flex h-10 min-w-10 shrink-0 items-center justify-center border-r border-slate-200 px-3 transition last:border-r-0 ${
         active ? "bg-blue-100 text-blue-700" : "bg-white text-slate-700 hover:bg-slate-50"
       }`}
     >
@@ -332,7 +332,7 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`flex h-10 w-10 items-center justify-center border-r border-slate-200 last:border-r-0 hover:bg-slate-50 disabled:text-slate-300 ${
+      className={`flex h-10 w-10 shrink-0 items-center justify-center border-r border-slate-200 last:border-r-0 hover:bg-slate-50 disabled:text-slate-300 ${
         danger ? "text-red-600 hover:bg-red-50" : "text-slate-700"
       }`}
     >
@@ -343,7 +343,7 @@ function IconButton({
 
 function ColorInput({ value, onChange, label }: { value: string; onChange: (color: string) => void; label: string }) {
   return (
-    <label className="flex h-10 w-14 items-center justify-center border-r border-slate-200" title={label}>
+    <label className="flex h-10 w-14 shrink-0 items-center justify-center border-r border-slate-200" title={label}>
       <span className="h-5 w-5 rounded-full border border-slate-200" style={{ backgroundColor: value }} />
       <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="sr-only" />
     </label>
@@ -451,21 +451,27 @@ function RedoIcon(props: IconProps) {
   );
 }
 
-function RotateLeftIcon(props: IconProps) {
+function PageRotateLeftIcon(props: IconProps) {
   return (
-    <SvgRoot {...props}>
-      <path d="M8 4H4v4" />
-      <path d="M4 8a8 8 0 1 0 2.3-5.7" />
-    </SvgRoot>
+    <svg className={props.className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 3.5h7l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 3.5v4h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.5 8.5a5.5 5.5 0 0 1 8.9-4.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M5.5 8.5H2.8V5.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 11.5h5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   );
 }
 
-function RotateRightIcon(props: IconProps) {
+function PageRotateRightIcon(props: IconProps) {
   return (
-    <SvgRoot {...props}>
-      <path d="M16 4h4v4" />
-      <path d="M20 8a8 8 0 1 1-2.3-5.7" />
-    </SvgRoot>
+    <svg className={props.className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M16 3.5H9l-4 4v11a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 3.5v4H5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18.5 8.5a5.5 5.5 0 0 0-8.9-4.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M18.5 8.5h2.7V5.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9.5 11.5H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   );
 }
 
