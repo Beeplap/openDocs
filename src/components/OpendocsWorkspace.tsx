@@ -2,8 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { getPdfFirstPagePreview, getPdfPageCount, imagesToFullPageA4PDF, mergePdfFiles, pdfToImages } from "../utils/pdfUtils";
 import { supabase, SUPABASE_SCANS_BUCKET, SUPABASE_SCAN_PAGES_TABLE } from "../lib/supabaseClient";
 import ExportPanel from "./scanner/ExportPanel";
@@ -12,7 +10,16 @@ import { A4_RATIO, defaultPageEdit } from "./scanner/types";
 import type { CropPoint, EditorBox, EditorFrame, ImageSize, MergeMode, PageEdit, PageFilter, PdfMergeItem, ScanItem, TransformHandle } from "./scanner/types";
 
 type WorkspaceMode = "scan" | "pdf" | "convert" | "advanced";
-export type WorkspaceIntent = "add-text" | "add-signature" | "add-watermark" | "draw" | "highlight" | "erase";
+export type WorkspaceIntent =
+  | "add-text"
+  | "add-signature"
+  | "add-watermark"
+  | "draw"
+  | "highlight"
+  | "erase"
+  | "unlock"
+  | "protect"
+  | "flatten";
 
 const CropModal = dynamic(() => import("./CropModal"), { ssr: false });
 const ImageConverter = dynamic(() => import("./ImageConverter"), { ssr: false });
@@ -31,16 +38,8 @@ type Props = {
   editorIntent?: WorkspaceIntent;
 };
 
-const workspaceRoutes: { mode: WorkspaceMode; label: string; href: string }[] = [
-  { mode: "scan", label: "Scan to PDF", href: "/scan-to-pdf" },
-  { mode: "pdf", label: "Merge PDFs", href: "/merge-pdfs" },
-  { mode: "convert", label: "Convert", href: "/convert" },
-  { mode: "advanced", label: "PDF Editor", href: "/pdf-editor" },
-];
-
 export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }: Props) {
   const [items, setItems] = useState<ScanItem[]>([]);
-  const pathname = usePathname();
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(initialMode);
   const [pdfFiles, setPdfFiles] = useState<PdfMergeItem[]>([]);
   const [pdfOrderIds, setPdfOrderIds] = useState<string[]>([]);
@@ -84,7 +83,6 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
   } | null>(null);
   const [draggingPdfId, setDraggingPdfId] = useState<string | null>(null);
   const [dragOverPdfId, setDragOverPdfId] = useState<string | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isClient = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -959,69 +957,6 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
 
       <div className="mx-auto max-w-7xl">
         <main className="space-y-5">
-          <header className="panel overflow-hidden">
-            <div className="flex flex-col gap-4 border-b border-slate-200 bg-white p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">Opendocs</p>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  onClick={() => setMobileMenuOpen((current) => !current)}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 sm:hidden"
-                  aria-label="Toggle workspace navigation"
-                >
-                  ☰ Menu
-                </button>
-
-                <div className="hidden grid-cols-4 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:inline-grid">
-                  {workspaceRoutes.map((route) => {
-                    const active = workspaceMode === route.mode || pathname === route.href;
-                    return (
-                      <Link
-                        key={route.mode}
-                        href={route.href}
-                        onClick={() => {
-                          setWorkspaceMode(route.mode);
-                          setMobileMenuOpen(false);
-                        }}
-                        className={`rounded-md px-3 py-2 text-center text-sm font-semibold transition ${
-                          active ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"
-                        }`}
-                      >
-                        {route.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-
-                {mobileMenuOpen ? (
-                  <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-slate-100 p-2 sm:hidden">
-                    {workspaceRoutes.map((route) => {
-                      const active = workspaceMode === route.mode || pathname === route.href;
-                      return (
-                        <Link
-                          key={route.mode}
-                          href={route.href}
-                          onClick={() => {
-                            setWorkspaceMode(route.mode);
-                            setMobileMenuOpen(false);
-                          }}
-                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                            active ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"
-                          }`}
-                        >
-                          {route.label}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </header>
-
           {workspaceMode === "scan" ? (
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
               <ScanGrid

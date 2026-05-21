@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { WorkspaceIntent } from "../components/OpendocsWorkspace";
 
 export type WorkspaceMode = "scan" | "pdf" | "convert" | "advanced";
+export type ToolSectionId = "scan" | "organize" | "convert" | "edit" | "secure";
 
 export type ToolRoute = {
   path: string;
@@ -12,6 +13,13 @@ export type ToolRoute = {
   priority: number;
   changeFrequency: "weekly" | "monthly";
   related: string[];
+};
+
+export type ToolNavGroup = {
+  id: ToolSectionId;
+  label: string;
+  description: string;
+  items: string[];
 };
 
 export const siteName = "Opendocs";
@@ -162,11 +170,11 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor",
     title: "PDF editor",
-    description: "Edit PDF pages with text, signatures, watermarks, drawings, highlights, and page tools.",
+    description: "Edit PDF pages with text, signatures, watermarks, drawings, highlights, secure exports, and page tools.",
     mode: "advanced",
     priority: 0.95,
     changeFrequency: "weekly",
-    related: ["/pdf-editor/add-text", "/pdf-editor/add-signature", "/pdf-editor/add-watermark", "/pdf-editor/draw"],
+    related: ["/pdf-editor/add-text", "/pdf-editor/add-signature", "/pdf-editor/add-watermark", "/pdf-editor/draw", "/pdf-editor/protect"],
   },
   {
     path: "/pdf-editor/add-text",
@@ -227,6 +235,69 @@ export const toolRoutes: ToolRoute[] = [
     priority: 0.62,
     changeFrequency: "monthly",
     related: ["/pdf-editor", "/pdf-editor/draw", "/pdf-editor/highlight"],
+  },
+  {
+    path: "/pdf-editor/unlock",
+    title: "Unlock PDF",
+    description: "Open a password-protected PDF with its password and export an unlocked browser-generated copy.",
+    mode: "advanced",
+    intent: "unlock",
+    priority: 0.78,
+    changeFrequency: "monthly",
+    related: ["/pdf-editor", "/pdf-editor/protect", "/pdf-editor/flatten"],
+  },
+  {
+    path: "/pdf-editor/protect",
+    title: "Protect PDF",
+    description: "Add password protection to a PDF locally in your browser before downloading it.",
+    mode: "advanced",
+    intent: "protect",
+    priority: 0.78,
+    changeFrequency: "monthly",
+    related: ["/pdf-editor", "/pdf-editor/unlock", "/pdf-editor/flatten"],
+  },
+  {
+    path: "/pdf-editor/flatten",
+    title: "Flatten PDF",
+    description: "Bake visible pages and annotations into a clean, flattened PDF export from your browser.",
+    mode: "advanced",
+    intent: "flatten",
+    priority: 0.76,
+    changeFrequency: "monthly",
+    related: ["/pdf-editor", "/pdf-editor/add-text", "/pdf-editor/protect"],
+  },
+];
+
+export const toolNavGroups: ToolNavGroup[] = [
+  {
+    id: "scan",
+    label: "Scan",
+    description: "Create PDFs from images and scanned pages.",
+    items: ["/scan-to-pdf", "/scan-to-pdf/crop", "/scan-to-pdf/reorder-pages", "/scan-to-pdf/two-up"],
+  },
+  {
+    id: "organize",
+    label: "Organize",
+    description: "Merge and arrange PDF documents.",
+    items: ["/merge-pdfs", "/merge-pdfs/reorder-pages", "/merge-pdfs/combine-pdfs"],
+  },
+  {
+    id: "convert",
+    label: "Convert",
+    description: "Convert images and PDFs between common formats.",
+    items: ["/convert", "/convert/compress-pdf", "/convert/pdf-to-jpg", "/convert/pdf-to-png", "/convert/jpg-to-pdf", "/convert/png-to-pdf", "/convert/heic-to-jpg"],
+  },
+  {
+    id: "edit",
+    label: "View & Edit",
+    description: "Annotate, sign, watermark, and adjust PDFs.",
+    items: ["/pdf-editor", "/pdf-editor/add-text", "/pdf-editor/add-signature", "/pdf-editor/add-watermark", "/pdf-editor/draw", "/pdf-editor/highlight", "/pdf-editor/erase"],
+  },
+  {
+    id: "secure",
+    label: "Secure",
+    description: "Unlock, protect, and flatten PDF files.",
+    items: ["/pdf-editor/unlock", "/pdf-editor/protect", "/pdf-editor/flatten"],
   },
 ];
 

@@ -24,6 +24,9 @@ type Props = {
   onDeletePage: () => void;
   onAddPageNumbers: () => void;
   onDownload: () => void;
+  onUnlockPdf: () => void;
+  onProtectPdf: () => void;
+  onFlattenPdf: () => void;
   onUpload: () => void;
   isExporting: boolean;
   hasPages: boolean;
@@ -76,6 +79,9 @@ export default function AdvancedToolbar({
   onDeletePage,
   onAddPageNumbers,
   onDownload,
+  onUnlockPdf,
+  onProtectPdf,
+  onFlattenPdf,
   onUpload,
   isExporting,
   hasPages,
@@ -267,6 +273,29 @@ export default function AdvancedToolbar({
         )}
 
         <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-slate-200">
+          <button
+            type="button"
+            onClick={onUnlockPdf}
+            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+          >
+            Unlock
+          </button>
+          <button
+            type="button"
+            onClick={onProtectPdf}
+            disabled={!hasPages || isExporting}
+            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:text-slate-300"
+          >
+            Protect
+          </button>
+          <button
+            type="button"
+            onClick={onFlattenPdf}
+            disabled={!hasPages || isExporting}
+            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:text-slate-300"
+          >
+            Flatten
+          </button>
           <button
             type="button"
             onClick={onUpload}

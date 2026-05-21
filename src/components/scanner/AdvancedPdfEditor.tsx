@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { encryptPDF } from "@pdfsmaller/pdf-encrypt-lite";
 import {
   DndContext,
   KeyboardSensor,
@@ -60,6 +61,8 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const [pages, setPages] = useState<PageData[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [annotations, setAnnotations] = useState<AdvancedAnnotation[]>([]);
+  const [currentPdfFile, setCurrentPdfFile] = useState<File | null>(null);
+  const [originalPageIds, setOriginalPageIds] = useState<string[]>([]);
   
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -81,6 +84,12 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
 
   const [watermarkText, setWatermarkText] = useState("");
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
+  const [unlockFile, setUnlockFile] = useState<File | null>(null);
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [showUnlockDialog, setShowUnlockDialog] = useState(initialIntent === "unlock");
+  const [protectPassword, setProtectPassword] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [showProtectDialog, setShowProtectDialog] = useState(false);
   const [highlightDraw, setHighlightDraw] = useState<{startX:number;startY:number;curX:number;curY:number}|null>(null);
   const [inkDraw, setInkDraw] = useState<{ points: { x: number; y: number }[] } | null>(null);
   const [eraserPreview, setEraserPreview] = useState<{ x: number; y: number } | null>(null);
@@ -234,20 +243,23 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     };
   }, []);
 
-  const loadPdf = useCallback(async (f: File) => {
+  const loadPdf = useCallback(async (f: File, password?: string) => {
     setIsLoading(true);
     onStatusMessage("Loading PDF pages...");
     try {
-      const canvases = await renderPdfAllPagesToCanvases(f, 2);
+      const canvases = await renderPdfAllPagesToCanvases(f, 2, password);
       const pagesData: PageData[] = canvases.map((c) => ({
         id: generateId(),
         dataUrl: c.toDataURL("image/png"),
         width: c.width, height: c.height, rotation: 0,
       }));
+      const pageIds = pagesData.map((page) => page.id);
       canvases.forEach((c) => c.remove());
       
       setHistory([{ annotations: [], pages: pagesData }]);
       setHistoryIndex(0);
+      setCurrentPdfFile(f);
+      setOriginalPageIds(pageIds);
       setPages(pagesData);
       setCurrentPage(0);
       setAnnotations([]);
@@ -259,8 +271,22 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       setDrawMode(initialDrawModeForIntent(initialIntent));
       setPanOffset({ x: 0, y: 0 });
       setDrawSettings(DEFAULT_DRAW_SETTINGS);
-      onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`);
-    } catch { onStatusMessage("Failed to load PDF."); }
+      setShowUnlockDialog(false);
+      setUnlockFile(null);
+      setUnlockPassword("");
+      if (initialIntent === "protect") setShowProtectDialog(true);
+      onStatusMessage(
+        initialIntent === "flatten"
+          ? "PDF loaded. Use Flatten to bake visible content into a clean export."
+          : `${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`
+      );
+      return true;
+    } catch {
+      setUnlockFile(f);
+      setShowUnlockDialog(true);
+      onStatusMessage("Could not open that PDF. If it is locked, enter its password to unlock it.");
+      return false;
+    }
     finally { setIsLoading(false); }
   }, [initialIntent, onStatusMessage]);
 
@@ -715,45 +741,41 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     }
   }
 
-  async function exportPdf() {
-    if (pages.length === 0) return;
-    setIsExporting(true);
-    onStatusMessage("Exporting annotated PDF...");
+  async function renderCurrentPdfBytes() {
+    const canvases: HTMLCanvasElement[] = [];
     try {
-      const canvases: HTMLCanvasElement[] = [];
       for (let i = 0; i < pages.length; i++) {
         const pg = pages[i];
         const canvas = document.createElement("canvas");
         const w = pg.rotation % 180 !== 0 ? pg.height : pg.width;
         const h = pg.rotation % 180 !== 0 ? pg.width : pg.height;
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d")!;
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Could not create PDF canvas");
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, w, h);
-        
-        // Draw page
+
         const img = await loadImg(pg.dataUrl);
         ctx.save();
         ctx.translate(w / 2, h / 2);
         ctx.rotate((pg.rotation * Math.PI) / 180);
         ctx.drawImage(img, -pg.width / 2, -pg.height / 2, pg.width, pg.height);
         ctx.restore();
-        
-        // Draw annotations
+
         const pageAnns = annotations.filter((a) => a.pageIndex === i);
         for (const ann of pageAnns) {
           if (ann.kind === "watermark") {
-             ctx.save();
-             ctx.fillStyle = `rgba(148,163,184,${ann.opacity})`;
-             ctx.font = "bold italic 48px sans-serif";
-             ctx.rotate(-45 * Math.PI / 180);
-             // tile watermark
-             for (let wx = -w; wx < w*2; wx+=300) {
-                for (let wy = -h; wy < h*2; wy+=200) {
-                   ctx.fillText(ann.text, wx, wy);
-                }
-             }
-             ctx.restore();
+            ctx.save();
+            ctx.fillStyle = `rgba(148,163,184,${ann.opacity})`;
+            ctx.font = "bold italic 48px sans-serif";
+            ctx.rotate((-45 * Math.PI) / 180);
+            for (let wx = -w; wx < w * 2; wx += 300) {
+              for (let wy = -h; wy < h * 2; wy += 200) {
+                ctx.fillText(ann.text, wx, wy);
+              }
+            }
+            ctx.restore();
           } else if (ann.kind === "ink") {
             ctx.save();
             drawInkPath(ctx, ann, w, h);
@@ -762,13 +784,13 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
             ctx.save();
             ctx.translate(ann.x * w, ann.y * h);
             ctx.rotate((ann.rotation * Math.PI) / 180);
-            
+
             if (ann.kind === "text") {
               drawTextBox(ctx, ann, ann.w * w, ann.h * h, w);
             } else if (ann.kind === "highlight") {
               ctx.fillStyle = ann.color;
               ctx.globalAlpha = ann.opacity;
-              ctx.fillRect(-ann.w * w / 2, -ann.h * h / 2, ann.w * w, ann.h * h);
+              ctx.fillRect((-ann.w * w) / 2, (-ann.h * h) / 2, ann.w * w, ann.h * h);
             } else if (ann.kind === "signature") {
               const sigImg = await loadImg(ann.dataUrl);
               ctx.globalAlpha = ann.opacity;
@@ -779,16 +801,81 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
         }
         canvases.push(canvas);
       }
-      const pdfBytes = await buildAnnotatedPdf(canvases);
+      return await buildAnnotatedPdf(canvases);
+    } finally {
       canvases.forEach((c) => c.remove());
-      const blob = new Blob([Uint8Array.from(pdfBytes)], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "opendocs-edited.pdf"; a.click();
-      URL.revokeObjectURL(url);
-      onStatusMessage("PDF exported successfully!");
-    } catch { onStatusMessage("Export failed."); }
-    finally { setIsExporting(false); }
+    }
+  }
+
+  function downloadPdfBytes(bytes: Uint8Array, filename: string) {
+    const blob = new Blob([Uint8Array.from(bytes)], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function canProtectOriginalPdf() {
+    if (!currentPdfFile || annotations.length > 0 || pages.length !== originalPageIds.length) return false;
+    return pages.every((page, index) => page.id === originalPageIds[index] && page.rotation % 360 === 0);
+  }
+
+  async function exportPdf(filename = "opendocs-edited.pdf", success = "PDF exported successfully.") {
+    if (pages.length === 0) return;
+    setIsExporting(true);
+    onStatusMessage("Exporting PDF...");
+    try {
+      const pdfBytes = await renderCurrentPdfBytes();
+      downloadPdfBytes(pdfBytes, filename);
+      onStatusMessage(success);
+    } catch {
+      onStatusMessage("Export failed.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  async function flattenPdf() {
+    await exportPdf("opendocs-flattened.pdf", "Flattened PDF downloaded.");
+  }
+
+  async function protectPdf() {
+    if (!protectPassword.trim()) return;
+    if (pages.length === 0) {
+      onStatusMessage("Upload a PDF before protecting it.");
+      return;
+    }
+
+    setIsExporting(true);
+    onStatusMessage("Encrypting PDF in your browser...");
+    try {
+      const sourceBytes = canProtectOriginalPdf()
+        ? new Uint8Array(await currentPdfFile!.arrayBuffer())
+        : await renderCurrentPdfBytes();
+      const encryptedBytes = await encryptPDF(
+        sourceBytes,
+        protectPassword.trim(),
+        ownerPassword.trim() || undefined
+      );
+      downloadPdfBytes(encryptedBytes, "opendocs-protected.pdf");
+      setShowProtectDialog(false);
+      setProtectPassword("");
+      setOwnerPassword("");
+      onStatusMessage("Protected PDF downloaded.");
+    } catch {
+      onStatusMessage("Could not protect this PDF. Try a standard PDF or flatten it first.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  async function unlockPdf() {
+    const file = unlockFile;
+    if (!file || !unlockPassword.trim()) return;
+    const loaded = await loadPdf(file, unlockPassword.trim());
+    if (loaded) onStatusMessage("Unlocked PDF loaded. Download it to save an unlocked copy.");
   }
 
   const page = pages[currentPage] ?? null;
@@ -812,6 +899,105 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
               <button type="button" onClick={handleWatermarkApply} disabled={!watermarkText.trim()}
                 className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUnlockDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="mb-2 text-lg font-semibold text-slate-900">Unlock PDF</h3>
+            <p className="mb-4 text-sm leading-6 text-slate-500">
+              Choose the locked PDF and enter its open password. The downloaded copy is rebuilt locally without that password.
+            </p>
+            <label className="mb-3 block text-sm font-semibold text-slate-700">
+              PDF file
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setUnlockFile(e.target.files?.[0] ?? null)}
+                className="mt-2 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+            {unlockFile ? <p className="mb-3 truncate text-xs font-medium text-slate-500">{unlockFile.name}</p> : null}
+            <label className="mb-4 block text-sm font-semibold text-slate-700">
+              Password
+              <input
+                type="password"
+                value={unlockPassword}
+                onChange={(e) => setUnlockPassword(e.target.value)}
+                className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-300"
+                autoFocus
+              />
+            </label>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUnlockDialog(false);
+                  setUnlockPassword("");
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void unlockPdf()}
+                disabled={!unlockFile || !unlockPassword.trim() || isLoading}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-40"
+              >
+                {isLoading ? "Opening" : "Unlock"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showProtectDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="mb-2 text-lg font-semibold text-slate-900">Protect PDF</h3>
+            <p className="mb-4 text-sm leading-6 text-slate-500">
+              Add an open password to the current PDF. Unedited PDFs are encrypted directly; edited PDFs are protected after export.
+            </p>
+            <label className="mb-3 block text-sm font-semibold text-slate-700">
+              Open password
+              <input
+                type="password"
+                value={protectPassword}
+                onChange={(e) => setProtectPassword(e.target.value)}
+                className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-300"
+                autoFocus
+              />
+            </label>
+            <label className="mb-4 block text-sm font-semibold text-slate-700">
+              Owner password
+              <input
+                type="password"
+                value={ownerPassword}
+                onChange={(e) => setOwnerPassword(e.target.value)}
+                placeholder="Optional"
+                className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-300"
+              />
+            </label>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowProtectDialog(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void protectPdf()}
+                disabled={!protectPassword.trim() || isExporting}
+                className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-40"
+              >
+                {isExporting ? "Protecting" : "Protect"}
+              </button>
             </div>
           </div>
         </div>
@@ -919,6 +1105,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
               drawSettings={drawSettings} setDrawSettings={setDrawSettings}
               onRotatePage={rotatePage} onDeletePage={deletePage}
               onAddPageNumbers={addPageNumbers} onDownload={exportPdf}
+              onUnlockPdf={() => setShowUnlockDialog(true)}
+              onProtectPdf={() => setShowProtectDialog(true)}
+              onFlattenPdf={() => void flattenPdf()}
               onUpload={() => fileInputRef.current?.click()}
               isExporting={isExporting} hasPages={pages.length > 0}
               pageCount={pages.length} currentPage={currentPage}

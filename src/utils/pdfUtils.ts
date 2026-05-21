@@ -217,12 +217,14 @@ export async function renderPdfPageToCanvas(
 
 export async function renderPdfAllPagesToCanvases(
   file: File,
-  scale = 1.5
+  scale = 1.5,
+  password?: string
 ): Promise<HTMLCanvasElement[]> {
   ensurePdfWorker();
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(arrayBuffer),
+    password,
     isOffscreenCanvasSupported: false,
   });
   const pdf = await loadingTask.promise;
