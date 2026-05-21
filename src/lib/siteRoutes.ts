@@ -44,7 +44,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/scan-to-pdf",
     title: "Scan to PDF",
-    description: "Create clean PDF documents from images, photos, and uploaded PDF pages directly in your browser.",
+    description: "Create clean PDFs from images, photos, and scanned pages.",
     mode: "scan",
     priority: 0.95,
     changeFrequency: "weekly",
@@ -53,7 +53,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/scan-to-pdf/crop",
     title: "Crop scanned pages",
-    description: "Crop scanned images and document pages before exporting a clean browser-generated PDF.",
+    description: "Crop scanned images and document pages before export.",
     mode: "scan",
     priority: 0.78,
     changeFrequency: "monthly",
@@ -62,7 +62,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/scan-to-pdf/reorder-pages",
     title: "Reorder scanned pages",
-    description: "Arrange scanned pages and images in the right order before downloading a PDF.",
+    description: "Arrange scanned pages and images in the right order.",
     mode: "scan",
     priority: 0.78,
     changeFrequency: "monthly",
@@ -71,7 +71,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/scan-to-pdf/two-up",
     title: "Create two-up PDF pages",
-    description: "Place two scanned pages on one PDF sheet for compact document exports.",
+    description: "Place two scanned pages on one PDF sheet.",
     mode: "scan",
     priority: 0.72,
     changeFrequency: "monthly",
@@ -80,7 +80,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/merge-pdfs",
     title: "Merge PDFs",
-    description: "Combine multiple PDF files into one document with client-side processing.",
+    description: "Combine multiple PDF files into one document.",
     mode: "pdf",
     priority: 0.95,
     changeFrequency: "weekly",
@@ -89,7 +89,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/merge-pdfs/reorder-pages",
     title: "Reorder PDF files before merging",
-    description: "Drag PDF files into the right sequence before combining them into one document.",
+    description: "Drag PDF files into the right order before merging.",
     mode: "pdf",
     priority: 0.78,
     changeFrequency: "monthly",
@@ -98,7 +98,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/merge-pdfs/combine-pdfs",
     title: "Combine PDF files",
-    description: "Join PDF files in the browser without sending document contents through a server workflow.",
+    description: "Join PDF files into one clean document.",
     mode: "pdf",
     priority: 0.78,
     changeFrequency: "monthly",
@@ -107,7 +107,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/convert",
     title: "Convert documents and images",
-    description: "Convert images and PDF files to PDF, JPG, PNG, or WEBP with browser-side processing.",
+    description: "Convert images and PDF files to PDF, JPG, PNG, or WEBP.",
     mode: "convert",
     priority: 0.9,
     changeFrequency: "weekly",
@@ -116,7 +116,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/convert/pdf-to-jpg",
     title: "Convert PDF to JPG",
-    description: "Turn PDF pages into JPG images with adjustable output quality.",
+    description: "Turn PDF pages into high-quality JPG images.",
     mode: "convert",
     priority: 0.76,
     changeFrequency: "monthly",
@@ -125,7 +125,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/convert/pdf-to-png",
     title: "Convert PDF to PNG",
-    description: "Export PDF pages as PNG images from a client-side document workflow.",
+    description: "Export PDF pages as sharp PNG images.",
     mode: "convert",
     priority: 0.72,
     changeFrequency: "monthly",
@@ -134,7 +134,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/convert/jpg-to-pdf",
     title: "Convert JPG to PDF",
-    description: "Convert JPG images into PDF documents from your browser.",
+    description: "Convert JPG images into PDF documents.",
     mode: "convert",
     priority: 0.76,
     changeFrequency: "monthly",
@@ -143,7 +143,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/convert/png-to-pdf",
     title: "Convert PNG to PDF",
-    description: "Create PDF files from PNG images with a simple browser-based converter.",
+    description: "Create PDF files from PNG images.",
     mode: "convert",
     priority: 0.72,
     changeFrequency: "monthly",
@@ -152,7 +152,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/convert/heic-to-jpg",
     title: "Convert HEIC to JPG",
-    description: "Convert HEIC or HEIF images to JPG when the browser supports decoding the source file.",
+    description: "Convert HEIC or HEIF images to JPG.",
     mode: "convert",
     priority: 0.72,
     changeFrequency: "monthly",
@@ -161,7 +161,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/convert/compress-pdf",
     title: "Compress PDF",
-    description: "Reduce PDF output size by choosing quality settings before download.",
+    description: "Reduce PDF size with adjustable quality settings.",
     mode: "convert",
     priority: 0.7,
     changeFrequency: "monthly",
@@ -170,7 +170,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor",
     title: "PDF editor",
-    description: "Edit PDF pages with text, signatures, watermarks, drawings, highlights, secure exports, and page tools.",
+    description: "Edit PDF pages with text, signatures, watermarks, drawings, highlights, and secure exports.",
     mode: "advanced",
     priority: 0.95,
     changeFrequency: "weekly",
@@ -179,7 +179,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/add-text",
     title: "Add text to PDF",
-    description: "Add editable text boxes to PDF pages with font, size, color, and style controls.",
+    description: "Add editable text boxes with font, size, color, and style controls.",
     mode: "advanced",
     intent: "add-text",
     priority: 0.82,
@@ -189,7 +189,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/add-signature",
     title: "Add signature to PDF",
-    description: "Draw and place signatures on PDF pages with line size and color controls.",
+    description: "Draw and place signatures with line size and color controls.",
     mode: "advanced",
     intent: "add-signature",
     priority: 0.82,
@@ -199,7 +199,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/add-watermark",
     title: "Add watermark to PDF",
-    description: "Apply repeating watermark text across PDF pages in a browser-based PDF editor.",
+    description: "Apply repeating watermark text across PDF pages.",
     mode: "advanced",
     intent: "add-watermark",
     priority: 0.78,
@@ -209,7 +209,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/draw",
     title: "Draw on PDF",
-    description: "Use pen tools to draw directly on PDF pages and export the edited document.",
+    description: "Use pen tools to draw directly on PDF pages.",
     mode: "advanced",
     intent: "draw",
     priority: 0.78,
@@ -219,7 +219,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/highlight",
     title: "Highlight PDF",
-    description: "Highlight areas of a PDF page using browser-side PDF annotation tools.",
+    description: "Highlight important areas on PDF pages.",
     mode: "advanced",
     intent: "highlight",
     priority: 0.76,
@@ -229,7 +229,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/erase",
     title: "Erase PDF annotations",
-    description: "Remove added annotations and drawings from PDF pages while editing in the browser.",
+    description: "Remove added annotations and drawings from PDF pages.",
     mode: "advanced",
     intent: "erase",
     priority: 0.62,
@@ -239,7 +239,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/unlock",
     title: "Unlock PDF",
-    description: "Open a password-protected PDF with its password and export an unlocked browser-generated copy.",
+    description: "Remove password protection from PDFs you can open.",
     mode: "advanced",
     intent: "unlock",
     priority: 0.78,
@@ -249,7 +249,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/protect",
     title: "Protect PDF",
-    description: "Add password protection to a PDF locally in your browser before downloading it.",
+    description: "Protect your PDF with 128-bit AES encryption.",
     mode: "advanced",
     intent: "protect",
     priority: 0.78,
@@ -259,7 +259,7 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/pdf-editor/flatten",
     title: "Flatten PDF",
-    description: "Bake visible pages and annotations into a clean, flattened PDF export from your browser.",
+    description: "Make PDF content uneditable before download.",
     mode: "advanced",
     intent: "flatten",
     priority: 0.76,

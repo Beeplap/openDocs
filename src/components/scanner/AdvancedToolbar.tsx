@@ -27,7 +27,10 @@ type Props = {
   onUnlockPdf: () => void;
   onProtectPdf: () => void;
   onFlattenPdf: () => void;
+  protectEnabled: boolean;
+  flattenEnabled: boolean;
   onUpload: () => void;
+  onNewPdf: () => void;
   isExporting: boolean;
   hasPages: boolean;
   pageCount: number;
@@ -82,7 +85,10 @@ export default function AdvancedToolbar({
   onUnlockPdf,
   onProtectPdf,
   onFlattenPdf,
+  protectEnabled,
+  flattenEnabled,
   onUpload,
+  onNewPdf,
   isExporting,
   hasPages,
   pageCount,
@@ -275,7 +281,16 @@ export default function AdvancedToolbar({
         <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-slate-200">
           <button
             type="button"
+            onClick={onNewPdf}
+            title="Start a new PDF"
+            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            New PDF
+          </button>
+          <button
+            type="button"
             onClick={onUnlockPdf}
+            title="Remove password protection"
             className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50"
           >
             Unlock
@@ -284,7 +299,10 @@ export default function AdvancedToolbar({
             type="button"
             onClick={onProtectPdf}
             disabled={!hasPages || isExporting}
-            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:text-slate-300"
+            title="Encrypt PDF on download"
+            className={`flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold disabled:text-slate-300 ${
+              protectEnabled ? "bg-rose-50 text-rose-700" : "text-slate-700 hover:bg-slate-50"
+            }`}
           >
             Protect
           </button>
@@ -292,7 +310,10 @@ export default function AdvancedToolbar({
             type="button"
             onClick={onFlattenPdf}
             disabled={!hasPages || isExporting}
-            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:text-slate-300"
+            title="Make PDF uneditable"
+            className={`flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold disabled:text-slate-300 ${
+              flattenEnabled ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
+            }`}
           >
             Flatten
           </button>

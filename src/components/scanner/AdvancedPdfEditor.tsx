@@ -88,8 +88,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const [unlockError, setUnlockError] = useState("");
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [protectPassword, setProtectPassword] = useState("");
-  const [ownerPassword, setOwnerPassword] = useState("");
+  const [showProtectPassword, setShowProtectPassword] = useState(false);
   const [showProtectDialog, setShowProtectDialog] = useState(false);
+  const [protectOnDownload, setProtectOnDownload] = useState(false);
+  const [flattenOnDownload, setFlattenOnDownload] = useState(initialIntent === "flatten");
   const [highlightDraw, setHighlightDraw] = useState<{startX:number;startY:number;curX:number;curY:number}|null>(null);
   const [inkDraw, setInkDraw] = useState<{ points: { x: number; y: number }[] } | null>(null);
   const [eraserPreview, setEraserPreview] = useState<{ x: number; y: number } | null>(null);
@@ -99,6 +101,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const pageRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadModeRef = useRef<"replace" | "append">("replace");
   const eraserSessionRef = useRef<{ deletedIds: Set<string>; baseAnnotations: AdvancedAnnotation[] } | null>(null);
   const pageSortSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -243,7 +246,17 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     };
   }, []);
 
-  const loadPdf = useCallback(async (f: File, password?: string) => {
+  useEffect(() => {
+    const handleNewPdf = () => {
+      uploadModeRef.current = "replace";
+      fileInputRef.current?.click();
+    };
+    window.addEventListener("opendocs:new-pdf", handleNewPdf);
+    return () => window.removeEventListener("opendocs:new-pdf", handleNewPdf);
+  }, []);
+
+  const loadPdf = useCallback(async (f: File, password?: string, options?: { append?: boolean }) => {
+    const append = options?.append ?? false;
     setIsLoading(true);
     onStatusMessage("Loading PDF pages...");
     try {
@@ -255,36 +268,54 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       }));
       const pageIds = pagesData.map((page) => page.id);
       canvases.forEach((c) => c.remove());
-      
-      setHistory([{ annotations: [], pages: pagesData }]);
-      setHistoryIndex(0);
-      setCurrentPdfFile(f);
-      setOriginalPageIds(pageIds);
-      setPages(pagesData);
-      setCurrentPage(0);
-      setAnnotations([]);
-      setSelectedId(null);
-      setEditingTextId(null);
-      setCopiedAnnotation(null);
-      setContextMenu(null);
-      setActiveTool(initialToolForIntent(initialIntent));
-      setDrawMode(initialDrawModeForIntent(initialIntent));
-      setPanOffset({ x: 0, y: 0 });
-      setDrawSettings(DEFAULT_DRAW_SETTINGS);
+
+      if (append && pages.length > 0) {
+        const nextPages = [...pages, ...pagesData];
+        pushState(annotations, nextPages);
+        setCurrentPdfFile(null);
+        setOriginalPageIds([]);
+        setCurrentPage(pages.length);
+        setSelectedId(null);
+        setEditingTextId(null);
+        setCopiedAnnotation(null);
+        setContextMenu(null);
+        onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} added.`);
+      } else {
+        setHistory([{ annotations: [], pages: pagesData }]);
+        setHistoryIndex(0);
+        setCurrentPdfFile(f);
+        setOriginalPageIds(pageIds);
+        setPages(pagesData);
+        setCurrentPage(0);
+        setAnnotations([]);
+        setSelectedId(null);
+        setEditingTextId(null);
+        setCopiedAnnotation(null);
+        setContextMenu(null);
+        setActiveTool(initialToolForIntent(initialIntent));
+        setDrawMode(initialDrawModeForIntent(initialIntent));
+        setPanOffset({ x: 0, y: 0 });
+        setDrawSettings(DEFAULT_DRAW_SETTINGS);
+        setProtectOnDownload(false);
+        setFlattenOnDownload(initialIntent === "flatten");
+        onStatusMessage(
+          initialIntent === "flatten"
+            ? "PDF loaded. Use Flatten to bake visible content into a clean export."
+            : initialIntent === "unlock"
+              ? "PDF loaded. Download it to save a rebuilt unlocked copy."
+            : `${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`
+        );
+      }
+
       setShowUnlockDialog(false);
       setUnlockPassword("");
       setUnlockError("");
       if (initialIntent === "protect") setShowProtectDialog(true);
-      onStatusMessage(
-        initialIntent === "flatten"
-          ? "PDF loaded. Use Flatten to bake visible content into a clean export."
-          : initialIntent === "unlock"
-            ? "PDF loaded. Download it to save a rebuilt unlocked copy."
-          : `${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`
-      );
+      if (initialIntent === "add-watermark") setShowWatermarkDialog(true);
       return true;
     } catch {
       setCurrentPdfFile(f);
+      uploadModeRef.current = append ? "append" : "replace";
       setShowUnlockDialog(true);
       setUnlockError(
         password
@@ -299,12 +330,18 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       return false;
     }
     finally { setIsLoading(false); }
-  }, [initialIntent, onStatusMessage]);
+  }, [annotations, initialIntent, onStatusMessage, pages, pushState]);
+
+  function openPdfPicker(mode: "replace" | "append") {
+    uploadModeRef.current = mode;
+    fileInputRef.current?.click();
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    void loadPdf(f);
+    const mode = uploadModeRef.current;
+    void loadPdf(f, undefined, { append: mode === "append" });
     e.target.value = "";
   }
 
@@ -417,6 +454,14 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   function handleToolChange(tool: Tool) {
     if (tool === "text" && page) {
       addTextAnnotation();
+      return;
+    }
+    if (tool === "watermark") {
+      if (!page) {
+        onStatusMessage("Upload a PDF before adding a watermark.");
+        return;
+      }
+      setShowWatermarkDialog(true);
       return;
     }
     setActiveTool(tool);
@@ -836,11 +881,22 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   async function exportPdf(filename = "opendocs-edited.pdf", success = "PDF exported successfully.") {
     if (pages.length === 0) return;
     setIsExporting(true);
-    onStatusMessage("Exporting PDF...");
+    onStatusMessage(protectOnDownload ? "Protecting PDF..." : "Exporting PDF...");
     try {
-      const pdfBytes = await renderCurrentPdfBytes();
-      downloadPdfBytes(pdfBytes, filename);
-      onStatusMessage(success);
+      const sourceBytes =
+        protectOnDownload && !flattenOnDownload && canProtectOriginalPdf()
+          ? new Uint8Array(await currentPdfFile!.arrayBuffer())
+          : await renderCurrentPdfBytes();
+      const outputBytes = protectOnDownload ? await encryptPDF(sourceBytes, protectPassword.trim()) : sourceBytes;
+      const outputName = protectOnDownload
+        ? "opendocs-protected.pdf"
+        : flattenOnDownload
+          ? "opendocs-flattened.pdf"
+          : filename;
+      downloadPdfBytes(outputBytes, outputName);
+      onStatusMessage(
+        protectOnDownload ? "Protected PDF downloaded." : flattenOnDownload ? "Flattened PDF downloaded." : success
+      );
     } catch {
       onStatusMessage("Export failed.");
     } finally {
@@ -848,45 +904,33 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     }
   }
 
-  async function flattenPdf() {
-    await exportPdf("opendocs-flattened.pdf", "Flattened PDF downloaded.");
+  function toggleFlattenPdf() {
+    if (pages.length === 0) {
+      onStatusMessage("Upload a PDF before flattening it.");
+      return;
+    }
+    const next = !flattenOnDownload;
+    setFlattenOnDownload(next);
+    onStatusMessage(next ? "Flatten will be applied when you download." : "Flatten export disabled.");
   }
 
-  async function protectPdf() {
+  function protectPdf() {
     if (!protectPassword.trim()) return;
     if (pages.length === 0) {
       onStatusMessage("Upload a PDF before protecting it.");
       return;
     }
-
-    setIsExporting(true);
-    onStatusMessage("Encrypting PDF in your browser...");
-    try {
-      const sourceBytes = canProtectOriginalPdf()
-        ? new Uint8Array(await currentPdfFile!.arrayBuffer())
-        : await renderCurrentPdfBytes();
-      const encryptedBytes = await encryptPDF(
-        sourceBytes,
-        protectPassword.trim(),
-        ownerPassword.trim() || undefined
-      );
-      downloadPdfBytes(encryptedBytes, "opendocs-protected.pdf");
-      setShowProtectDialog(false);
-      setProtectPassword("");
-      setOwnerPassword("");
-      onStatusMessage("Protected PDF downloaded.");
-    } catch {
-      onStatusMessage("Could not protect this PDF. Try a standard PDF or flatten it first.");
-    } finally {
-      setIsExporting(false);
-    }
+    setProtectOnDownload(true);
+    setShowProtectDialog(false);
+    setShowProtectPassword(false);
+    onStatusMessage("Protection will be applied when you download.");
   }
 
   async function unlockPdf() {
     const file = currentPdfFile;
     if (!file || !unlockPassword.trim()) return;
     setUnlockError("");
-    const loaded = await loadPdf(file, unlockPassword.trim());
+    const loaded = await loadPdf(file, unlockPassword.trim(), { append: uploadModeRef.current === "append" });
     if (loaded) onStatusMessage("Unlocked PDF loaded. Download it to save an unlocked copy.");
   }
 
@@ -921,7 +965,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="mb-2 text-lg font-semibold text-slate-900">Unlock PDF</h3>
             <p className="mb-4 text-sm leading-6 text-slate-500">
-              Enter the open password for the current PDF. The downloaded copy is rebuilt locally without that password.
+              Enter the password for this PDF.
             </p>
             {currentPdfFile ? <p className="mb-3 truncate text-xs font-medium text-slate-500">{currentPdfFile.name}</p> : null}
             <label className="mb-4 block text-sm font-semibold text-slate-700">
@@ -968,32 +1012,37 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="mb-2 text-lg font-semibold text-slate-900">Protect PDF</h3>
             <p className="mb-4 text-sm leading-6 text-slate-500">
-              Add an open password to the current PDF. Unedited PDFs are encrypted directly; edited PDFs are protected after export.
+              Protect your PDF with 128-bit AES encryption.
             </p>
-            <label className="mb-3 block text-sm font-semibold text-slate-700">
-              Open password
-              <input
-                type="password"
-                value={protectPassword}
-                onChange={(e) => setProtectPassword(e.target.value)}
-                className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-300"
-                autoFocus
-              />
-            </label>
             <label className="mb-4 block text-sm font-semibold text-slate-700">
-              Owner password
-              <input
-                type="password"
-                value={ownerPassword}
-                onChange={(e) => setOwnerPassword(e.target.value)}
-                placeholder="Optional"
-                className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-300"
-              />
+              Confirm password
+              <span className="mt-2 flex overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-blue-300">
+                <input
+                  type={showProtectPassword ? "text" : "password"}
+                  value={protectPassword}
+                  onChange={(e) => {
+                    setProtectPassword(e.target.value);
+                    if (protectOnDownload) setProtectOnDownload(false);
+                  }}
+                  className="min-w-0 flex-1 px-4 py-2.5 text-sm outline-none"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowProtectPassword((current) => !current)}
+                  className="border-l border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  {showProtectPassword ? "Hide" : "Show"}
+                </button>
+              </span>
             </label>
             <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowProtectDialog(false)}
+                onClick={() => {
+                  setShowProtectDialog(false);
+                  setShowProtectPassword(false);
+                }}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
@@ -1004,7 +1053,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                 disabled={!protectPassword.trim() || isExporting}
                 className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-40"
               >
-                {isExporting ? "Protecting" : "Protect"}
+                Apply
               </button>
             </div>
           </div>
@@ -1050,7 +1099,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
               <div>
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900">PDF Editor</h1>
               </div>
-              <button type="button" onClick={() => fileInputRef.current?.click()}
+              <button type="button" onClick={() => openPdfPicker("replace")}
                 className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition">
                 Add PDF
               </button>
@@ -1062,12 +1111,12 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                 e.preventDefault();
                 const f = e.dataTransfer.files?.[0];
                 if (f && f.type === "application/pdf") {
-                  void loadPdf(f);
+                  void loadPdf(f, undefined, { append: pages.length > 0 });
                 } else if (f) {
                   onStatusMessage("Please upload a valid PDF file.");
                 }
               }}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => openPdfPicker("replace")}
               className="group flex min-h-[400px] cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 hover:border-emerald-400 hover:bg-emerald-50/50 transition">
               <div className="text-center">
                 <h3 className="text-xl font-semibold text-slate-900">Drop or choose PDF</h3>
@@ -1097,7 +1146,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
 
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => openPdfPicker("append")}
                 className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-2xl leading-none text-white shadow-sm transition hover:bg-blue-700"
                 aria-label="Add PDF"
               >
@@ -1127,8 +1176,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                 setShowUnlockDialog(true);
               }}
               onProtectPdf={() => setShowProtectDialog(true)}
-              onFlattenPdf={() => void flattenPdf()}
-              onUpload={() => fileInputRef.current?.click()}
+              onFlattenPdf={toggleFlattenPdf}
+              protectEnabled={protectOnDownload}
+              flattenEnabled={flattenOnDownload}
+              onUpload={() => openPdfPicker("append")}
+              onNewPdf={() => openPdfPicker("replace")}
               isExporting={isExporting} hasPages={pages.length > 0}
               pageCount={pages.length} currentPage={currentPage}
               annotations={annotations} onDeleteAnnotation={deleteAnnotation}
