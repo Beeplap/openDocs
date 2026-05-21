@@ -6,6 +6,9 @@ import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 
 const pdfWorkerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
+const CSS_PIXEL_TO_POINT = 0.75;
+const A4_WIDTH = 595.28;
+const A4_HEIGHT = 841.89;
 
 function ensurePdfWorker() {
   if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
@@ -65,23 +68,23 @@ export async function mergePdfFiles(files: File[]): Promise<Uint8Array> {
 
 export async function imagesToPDF(images: Blob[]): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  const A4_WIDTH = 595.28;
-  const A4_HEIGHT = 841.89;
   for (const blob of images) {
     const arrayBuffer = await blob.arrayBuffer();
     const type = blob.type;
     const embedded = type === "image/png"
       ? await pdfDoc.embedPng(arrayBuffer)
       : await pdfDoc.embedJpg(arrayBuffer);
-    const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
     const { width, height } = embedded.scale(1);
-    const maxW = A4_WIDTH * 0.9;
-    const maxH = A4_HEIGHT * 0.9;
-    const scale = Math.min(1, maxW / width, maxH / height);
+    const pageWidth = Math.max(1, width * CSS_PIXEL_TO_POINT);
+    const pageHeight = Math.max(1, height * CSS_PIXEL_TO_POINT);
+    const page = pdfDoc.addPage([pageWidth, pageHeight]);
+    const maxW = pageWidth * 0.94;
+    const maxH = pageHeight * 0.94;
+    const scale = Math.min(maxW / width, maxH / height);
     const w = width * scale;
     const h = height * scale;
-    const x = (A4_WIDTH - w) / 2;
-    const y = (A4_HEIGHT - h) / 2;
+    const x = (pageWidth - w) / 2;
+    const y = (pageHeight - h) / 2;
     page.drawImage(embedded, { x, y, width: w, height: h });
   }
   return pdfDoc.save();
@@ -89,16 +92,17 @@ export async function imagesToPDF(images: Blob[]): Promise<Uint8Array> {
 
 export async function imagesToFullPageA4PDF(images: Blob[]): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  const A4_WIDTH = 595.28;
-  const A4_HEIGHT = 841.89;
 
   for (const blob of images) {
     const arrayBuffer = await blob.arrayBuffer();
     const embedded = blob.type === "image/png"
       ? await pdfDoc.embedPng(arrayBuffer)
       : await pdfDoc.embedJpg(arrayBuffer);
-    const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-    page.drawImage(embedded, { x: 0, y: 0, width: A4_WIDTH, height: A4_HEIGHT });
+    const { width, height } = embedded.scale(1);
+    const pageWidth = Math.max(1, width * CSS_PIXEL_TO_POINT);
+    const pageHeight = Math.max(1, height * CSS_PIXEL_TO_POINT);
+    const page = pdfDoc.addPage([pageWidth, pageHeight]);
+    page.drawImage(embedded, { x: 0, y: 0, width: pageWidth, height: pageHeight });
   }
 
   return pdfDoc.save();
@@ -106,8 +110,6 @@ export async function imagesToFullPageA4PDF(images: Blob[]): Promise<Uint8Array>
 
 export async function imagesToA4TwoUpPDF(images: Blob[]): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  const A4_WIDTH = 595.28;
-  const A4_HEIGHT = 841.89;
 
   const margin = 30;
   const gap = 12;
@@ -248,15 +250,15 @@ export async function renderPdfAllPagesToCanvases(
 
 export async function buildAnnotatedPdf(pageCanvases: HTMLCanvasElement[]): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  const A4_WIDTH = 595.28;
-  const A4_HEIGHT = 841.89;
   for (const canvas of pageCanvases) {
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     const base64 = dataUrl.split(",")[1];
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     const embedded = await pdfDoc.embedJpg(bytes);
-    const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-    page.drawImage(embedded, { x: 0, y: 0, width: A4_WIDTH, height: A4_HEIGHT });
+    const pageWidth = Math.max(1, canvas.width * CSS_PIXEL_TO_POINT);
+    const pageHeight = Math.max(1, canvas.height * CSS_PIXEL_TO_POINT);
+    const page = pdfDoc.addPage([pageWidth, pageHeight]);
+    page.drawImage(embedded, { x: 0, y: 0, width: pageWidth, height: pageHeight });
   }
   return pdfDoc.save();
 }

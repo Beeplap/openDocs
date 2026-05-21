@@ -1067,21 +1067,23 @@ async function renderEditedPdfPages(
   mergeMode: "single" | "twoUp",
   width: number
 ) {
-  const height = Math.round(width / A4_RATIO);
   const pages: Blob[] = [];
 
   if (mergeMode === "single") {
     for (const item of items) {
-      const canvas = createA4Canvas(width, height);
+      const pageRatio = await getEditedItemAspectRatio(item);
+      const canvasWidth = pageRatio >= 1 ? width : Math.round(width * pageRatio);
+      const canvasHeight = pageRatio >= 1 ? Math.round(width / pageRatio) : width;
+      const canvas = createA4Canvas(canvasWidth, canvasHeight);
       const ctx = canvas.getContext("2d");
       if (!ctx) continue;
 
-      drawPageBackground(ctx, width, height);
+      drawPageBackground(ctx, canvasWidth, canvasHeight);
       await drawEditedItem(ctx, item, {
-        x: width * 0.08,
-        y: height * 0.065,
-        w: width * 0.84,
-        h: height * 0.87,
+        x: 0,
+        y: 0,
+        w: canvasWidth,
+        h: canvasHeight,
       });
 
       pages.push(await canvasToBlob(canvas));
@@ -1089,6 +1091,7 @@ async function renderEditedPdfPages(
     return pages;
   }
 
+  const height = Math.round(width / A4_RATIO);
   for (let i = 0; i < items.length; i += 2) {
     const canvas = createA4Canvas(width, height);
     const ctx = canvas.getContext("2d");
@@ -1119,6 +1122,21 @@ async function renderEditedPdfPages(
   }
 
   return pages;
+}
+
+async function getEditedItemAspectRatio(item: ScanItem) {
+  const image = await loadImage(item.previewUrl);
+  const imageSize = {
+    w: image.naturalWidth || image.width,
+    h: image.naturalHeight || image.height,
+  };
+  const crop = item.edit.crop;
+  const documentCropSize = item.edit.documentCrop ? getDocumentCropSize(item.edit.documentCrop.points, imageSize) : null;
+  const contentW = documentCropSize?.w ?? imageSize.w * Math.max(0.04, 1 - crop.left - crop.right);
+  const contentH = documentCropSize?.h ?? imageSize.h * Math.max(0.04, 1 - crop.top - crop.bottom);
+  const normalizedRotation = ((item.edit.rotation % 360) + 360) % 360;
+  const ratio = normalizedRotation === 90 || normalizedRotation === 270 ? contentH / contentW : contentW / contentH;
+  return clamp(ratio, 0.2, 5);
 }
 
 function createA4Canvas(width: number, height: number) {

@@ -84,8 +84,8 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
 
   const [watermarkText, setWatermarkText] = useState("");
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
-  const [unlockFile, setUnlockFile] = useState<File | null>(null);
   const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockError, setUnlockError] = useState("");
   const [showUnlockDialog, setShowUnlockDialog] = useState(initialIntent === "unlock");
   const [protectPassword, setProtectPassword] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
@@ -272,8 +272,8 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       setPanOffset({ x: 0, y: 0 });
       setDrawSettings(DEFAULT_DRAW_SETTINGS);
       setShowUnlockDialog(false);
-      setUnlockFile(null);
       setUnlockPassword("");
+      setUnlockError("");
       if (initialIntent === "protect") setShowProtectDialog(true);
       onStatusMessage(
         initialIntent === "flatten"
@@ -282,9 +282,18 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       );
       return true;
     } catch {
-      setUnlockFile(f);
+      setCurrentPdfFile(f);
       setShowUnlockDialog(true);
-      onStatusMessage("Could not open that PDF. If it is locked, enter its password to unlock it.");
+      setUnlockError(
+        password
+          ? "That password did not unlock this PDF. Check the password and try again."
+          : "This PDF is protected. Enter its password to unlock it."
+      );
+      onStatusMessage(
+        password
+          ? "Wrong password. Try again."
+          : "Could not open that PDF. If it is locked, enter its password to unlock it."
+      );
       return false;
     }
     finally { setIsLoading(false); }
@@ -872,8 +881,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   }
 
   async function unlockPdf() {
-    const file = unlockFile;
+    const file = currentPdfFile;
     if (!file || !unlockPassword.trim()) return;
+    setUnlockError("");
     const loaded = await loadPdf(file, unlockPassword.trim());
     if (loaded) onStatusMessage("Unlocked PDF loaded. Download it to save an unlocked copy.");
   }
@@ -909,34 +919,30 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="mb-2 text-lg font-semibold text-slate-900">Unlock PDF</h3>
             <p className="mb-4 text-sm leading-6 text-slate-500">
-              Choose the locked PDF and enter its open password. The downloaded copy is rebuilt locally without that password.
+              Enter the open password for the current PDF. The downloaded copy is rebuilt locally without that password.
             </p>
-            <label className="mb-3 block text-sm font-semibold text-slate-700">
-              PDF file
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={(e) => setUnlockFile(e.target.files?.[0] ?? null)}
-                className="mt-2 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              />
-            </label>
-            {unlockFile ? <p className="mb-3 truncate text-xs font-medium text-slate-500">{unlockFile.name}</p> : null}
+            {currentPdfFile ? <p className="mb-3 truncate text-xs font-medium text-slate-500">{currentPdfFile.name}</p> : null}
             <label className="mb-4 block text-sm font-semibold text-slate-700">
               Password
               <input
                 type="password"
                 value={unlockPassword}
-                onChange={(e) => setUnlockPassword(e.target.value)}
+                onChange={(e) => {
+                  setUnlockPassword(e.target.value);
+                  setUnlockError("");
+                }}
                 className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-300"
                 autoFocus
               />
             </label>
+            {unlockError ? <p className="-mt-2 mb-4 text-sm font-medium text-rose-600">{unlockError}</p> : null}
             <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {
                   setShowUnlockDialog(false);
                   setUnlockPassword("");
+                  setUnlockError("");
                 }}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
@@ -945,7 +951,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
               <button
                 type="button"
                 onClick={() => void unlockPdf()}
-                disabled={!unlockFile || !unlockPassword.trim() || isLoading}
+                disabled={!currentPdfFile || !unlockPassword.trim() || isLoading}
                 className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-40"
               >
                 {isLoading ? "Opening" : "Unlock"}
