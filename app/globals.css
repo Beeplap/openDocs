@@ -82,3 +82,8 @@ textarea {
 .soft-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
+.tool-link:hover .tool-tooltip,
+.tool-link:focus-visible .tool-tooltip {
+  display: block;
+}
