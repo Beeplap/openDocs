@@ -140,9 +140,7 @@ export default function ToolMegaMenu() {
                 ))}
               </span>
               All Tools
-              <span className={`text-xs transition ${drawerMode === "all" ? "rotate-180" : ""}`} aria-hidden="true">
-                ^
-              </span>
+              <ChevronDownIcon className={`h-3.5 w-3.5 transition ${drawerMode === "all" ? "rotate-180" : ""}`} />
             </button>
 
             {primaryNav.map((item) => {
@@ -225,5 +223,19 @@ export default function ToolMegaMenu() {
         ) : null}
       </div>
     </header>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      viewBox="0 0 20 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

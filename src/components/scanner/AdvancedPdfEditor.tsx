@@ -86,7 +86,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState("");
-  const [showUnlockDialog, setShowUnlockDialog] = useState(initialIntent === "unlock");
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [protectPassword, setProtectPassword] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
   const [showProtectDialog, setShowProtectDialog] = useState(false);
@@ -278,6 +278,8 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       onStatusMessage(
         initialIntent === "flatten"
           ? "PDF loaded. Use Flatten to bake visible content into a clean export."
+          : initialIntent === "unlock"
+            ? "PDF loaded. Download it to save a rebuilt unlocked copy."
           : `${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`
       );
       return true;
@@ -1110,8 +1112,20 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
               drawMode={drawMode} setDrawMode={setDrawMode}
               drawSettings={drawSettings} setDrawSettings={setDrawSettings}
               onRotatePage={rotatePage} onDeletePage={deletePage}
-              onAddPageNumbers={addPageNumbers} onDownload={exportPdf}
-              onUnlockPdf={() => setShowUnlockDialog(true)}
+              onAddPageNumbers={addPageNumbers}
+              onDownload={() =>
+                initialIntent === "unlock"
+                  ? void exportPdf("opendocs-unlocked.pdf", "Unlocked PDF downloaded.")
+                  : void exportPdf()
+              }
+              onUnlockPdf={() => {
+                if (!currentPdfFile) {
+                  onStatusMessage("Upload a password-protected PDF first.");
+                  return;
+                }
+                setUnlockError("");
+                setShowUnlockDialog(true);
+              }}
               onProtectPdf={() => setShowProtectDialog(true)}
               onFlattenPdf={() => void flattenPdf()}
               onUpload={() => fileInputRef.current?.click()}
