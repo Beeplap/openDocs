@@ -23,6 +23,7 @@ import type { DrawMode, DrawSettings, Tool } from "./AdvancedToolbar";
 import type { WorkspaceIntent } from "../OpendocsWorkspace";
 import type { AdvancedAnnotation } from "./types";
 import { renderPdfAllPagesToCanvases, buildAnnotatedPdf } from "../../utils/pdfUtils";
+import { takePendingFiles } from "../../utils/pendingFiles";
 
 type PageData = { dataUrl: string; width: number; height: number; rotation: number; id: string };
 
@@ -147,6 +148,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor)
   );
+  const pendingFilesLoadedRef = useRef(false);
 
   const pushState = useCallback((newAnns: AdvancedAnnotation[], newPgs: PageData[]) => {
     setHistory((prev) => {
@@ -378,6 +380,20 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     }
     finally { setIsLoading(false); }
   }, [annotations, initialIntent, onStatusMessage, pages, pushState]);
+
+  useEffect(() => {
+    if (pendingFilesLoadedRef.current) return;
+    pendingFilesLoadedRef.current = true;
+
+    void takePendingFiles("pdf-editor")
+      .then((files) => {
+        const file = files.find((item) => item.type === "application/pdf" || item.name.toLowerCase().endsWith(".pdf"));
+        if (!file) return;
+        onStatusMessage("Opening uploaded PDF in editor...");
+        void loadPdf(file);
+      })
+      .catch(() => {});
+  }, [loadPdf, onStatusMessage]);
 
   function openPdfPicker(mode: "replace" | "append") {
     uploadModeRef.current = mode;

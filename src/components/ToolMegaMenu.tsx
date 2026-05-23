@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import ThemeToggle from "./ThemeToggle";
 import type { ToolNavGroup, ToolSectionId } from "../lib/siteRoutes";
@@ -25,6 +26,10 @@ const primaryNav = [
 
 type DrawerMode = "all" | ToolSectionId | "sign" | null;
 type DrawerAnchor = { left: number } | null;
+type DrawerStyle = CSSProperties & {
+  "--mega-drawer-top"?: string;
+  "--mega-drawer-max-height"?: string;
+};
 const ALL_DRAWER_WIDTH = 1360;
 const WIDE_COMPACT_DRAWER_WIDTH = 640;
 
@@ -39,6 +44,7 @@ export default function ToolMegaMenu() {
   const pathname = usePathname();
   const [drawerMode, setDrawerMode] = useState<DrawerMode>(null);
   const [drawerAnchor, setDrawerAnchor] = useState<DrawerAnchor>(null);
+  const [drawerMetrics, setDrawerMetrics] = useState({ top: 80, maxHeight: 480 });
   const navWrapRef = useRef<HTMLDivElement>(null);
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,6 +70,7 @@ export default function ToolMegaMenu() {
   function updateAnchor(node: HTMLElement | null, mode: Exclude<DrawerMode, null>) {
     const wrap = navWrapRef.current;
     if (!wrap || !node) return;
+    updateDrawerMetrics();
     const wrapRect = wrap.getBoundingClientRect();
     const nodeRect = node.getBoundingClientRect();
     const panelWidth =
@@ -71,6 +78,17 @@ export default function ToolMegaMenu() {
     const centeredLeft = nodeRect.left - wrapRect.left + nodeRect.width / 2 - panelWidth / 2;
     const maxLeft = Math.max(16, wrapRect.width - panelWidth - 16);
     setDrawerAnchor({ left: Math.min(Math.max(16, centeredLeft), maxLeft) });
+  }
+
+  function updateDrawerMetrics() {
+    const wrap = navWrapRef.current;
+    if (!wrap) return;
+    const bottom = wrap.getBoundingClientRect().bottom;
+    const gutter = 12;
+    setDrawerMetrics({
+      top: Math.max(0, Math.round(bottom)),
+      maxHeight: Math.max(220, Math.round(window.innerHeight - bottom - gutter)),
+    });
   }
 
   function startHoverOpen(mode: Exclude<DrawerMode, null>, node: HTMLElement | null) {
@@ -108,6 +126,24 @@ export default function ToolMegaMenu() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!drawerMode) return;
+    updateDrawerMetrics();
+
+    window.addEventListener("resize", updateDrawerMetrics);
+    window.addEventListener("orientationchange", updateDrawerMetrics);
+    return () => {
+      window.removeEventListener("resize", updateDrawerMetrics);
+      window.removeEventListener("orientationchange", updateDrawerMetrics);
+    };
+  }, [drawerMode]);
+
+  const drawerStyle: DrawerStyle = {
+    left: drawerAnchor?.left ?? 16,
+    "--mega-drawer-top": `${drawerMetrics.top}px`,
+    "--mega-drawer-max-height": `${drawerMetrics.maxHeight}px`,
+  };
+
   return (
     <header className="site-header sticky top-0 z-40 border-b backdrop-blur">
       <div
@@ -116,12 +152,12 @@ export default function ToolMegaMenu() {
         onMouseEnter={clearCloseTimer}
         onMouseLeave={scheduleClose}
       >
-        <div className="flex min-h-16 flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <Link href="/" className="site-brand text-lg font-semibold tracking-tight">
+        <div className="flex min-h-16 flex-wrap items-center gap-3 py-3 lg:flex-nowrap lg:justify-between">
+          <Link href="/" className="site-brand order-1 text-lg font-semibold tracking-tight">
             Opendocs
           </Link>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="order-3 flex basis-full flex-wrap items-center gap-2 lg:order-2 lg:basis-auto">
             <nav className="flex flex-wrap items-center gap-1.5" aria-label="Document tools">
               <button
                 type="button"
@@ -167,16 +203,19 @@ export default function ToolMegaMenu() {
                 );
               })}
             </nav>
+          </div>
+
+          <div className="order-2 ml-auto lg:order-3 lg:ml-0">
             <ThemeToggle />
           </div>
         </div>
 
         {drawerGroups.length > 0 ? (
           <div
-            className={`mega-drawer absolute top-full z-50 max-h-[calc(100vh-5rem)] overflow-auto rounded-b-lg border border-t-0 px-5 py-5 shadow-2xl ${
+            className={`mega-drawer absolute top-full z-50 max-h-[var(--mega-drawer-max-height)] overflow-y-auto rounded-b-lg border border-t-0 px-5 py-5 shadow-2xl ${
               drawerMode === "all" ? "w-[min(1360px,calc(100vw-2rem))]" : "w-[min(640px,calc(100vw-2rem))]"
             }`}
-            style={{ left: drawerAnchor?.left ?? 16 }}
+            style={drawerStyle}
           >
             <div className={`grid gap-x-8 gap-y-6 ${drawerMode === "all" ? "sm:grid-cols-2 lg:grid-cols-5" : "grid-cols-2"}`}>
               {drawerGroups.map((group) => (

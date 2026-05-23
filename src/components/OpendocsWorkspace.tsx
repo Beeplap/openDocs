@@ -572,6 +572,12 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
     }
   }
 
+  function handlePickedImageFiles(fileList: FileList | null) {
+    if (!fileList?.length) return;
+    setWorkspaceMode("scan");
+    void handlePickedFiles(fileList);
+  }
+
   function removePdfFile(id: string) {
     setPdfFiles((current) => {
       const target = current.find((item) => item.id === id);
@@ -935,11 +941,11 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
       <input
         ref={photoInputRef}
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,.avif,.bmp,.gif,.heic,.heif,.jpg,.jpeg,.png,.svg,.tif,.tiff,.webp"
         multiple
         className="hidden"
         onChange={(event) => {
-          void handlePickedFiles(event.target.files);
+          handlePickedImageFiles(event.target.files);
           event.target.value = "";
         }}
       />
@@ -1011,6 +1017,14 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
                   return;
                 }
                 pdfInputRef.current?.click();
+              }}
+              onAddImages={(files) => {
+                if (files && files.length > 0) {
+                  handlePickedImageFiles(files);
+                  return;
+                }
+                setWorkspaceMode("scan");
+                photoInputRef.current?.click();
               }}
               onMergePdfs={exportMergedPdfs}
               onRemovePdf={removePdfFile}

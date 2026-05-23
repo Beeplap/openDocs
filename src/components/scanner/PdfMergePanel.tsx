@@ -8,11 +8,18 @@ type Props = {
   pdfFiles: PdfMergeItem[];
   isProcessing: boolean;
   onAddPdfs: (files?: FileList | null) => void;
+  onAddImages: (files?: FileList | null) => void;
   onMergePdfs: () => void | Promise<void>;
   onRemovePdf: (id: string) => void;
   onMovePdf: (id: string, direction: -1 | 1) => void;
   onReorderPdf: (id: string, overId: string) => void;
 };
+
+const IMAGE_EXTENSION_PATTERN = /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/i;
+
+function isImageFile(file: File) {
+  return file.type.startsWith("image/") || IMAGE_EXTENSION_PATTERN.test(file.name);
+}
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -23,6 +30,7 @@ export default function PdfMergePanel({
   pdfFiles,
   isProcessing,
   onAddPdfs,
+  onAddImages,
   onMergePdfs,
   onRemovePdf,
   onMovePdf,
@@ -85,6 +93,12 @@ export default function PdfMergePanel({
     e.preventDefault();
     e.stopPropagation();
     if (isProcessing) return;
+    const files = Array.from(e.dataTransfer.files);
+    const hasImage = files.some(isImageFile);
+    if (hasImage) {
+      onAddImages(e.dataTransfer.files);
+      return;
+    }
     onAddPdfs(e.dataTransfer.files);
   }
 
@@ -95,15 +109,26 @@ export default function PdfMergePanel({
           <div>
             <h2 className="text-xl font-semibold text-slate-950">Merge PDFs</h2>
           </div>
-          <button
-            type="button"
-            onClick={() => onAddPdfs()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            Add PDFs
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onAddPdfs()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Add PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => onAddImages()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+            >
+              Add image
+            </button>
+          </div>
         </div>
 
         <div className="mt-4">
@@ -116,6 +141,7 @@ export default function PdfMergePanel({
               className="flex min-h-72 w-full flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center transition hover:border-slate-400 hover:bg-white"
             >
               <span className="text-base font-semibold text-slate-950">Drop or choose PDFs</span>
+              <span className="mt-2 text-sm text-slate-500">Use Add image to build a PDF from images with crop, edit, reorder, and two-up tools.</span>
             </button>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

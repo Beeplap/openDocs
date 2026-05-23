@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return routeMetadata(route);
 }
 
-export default async function ScanToPdfFeaturePage({ params }: Props) {
+export default async function MergeImagesPdfFeaturePage({ params }: Props) {
   const { feature } = await params;
   const route = getRoute(`/merge-images-pdf/${feature}`);
   if (!route) notFound();

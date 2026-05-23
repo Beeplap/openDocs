@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import LandingUploadButton from "../src/components/LandingUploadButton";
 import ToolMegaMenu from "../src/components/ToolMegaMenu";
 import { getRoute, routeMetadata, toolRoutes } from "../src/lib/siteRoutes";
 
@@ -12,7 +13,7 @@ const popularToolPaths = [
   "/convert/compress-pdf",
   "/pdf-editor",
   "/pdf-editor/add-text",
-  "/scan-to-pdf",
+  "/merge-images-pdf",
   "/convert/pdf-to-jpg",
   "/pdf-editor/draw",
   "/convert/pdf-to-png",
@@ -74,11 +75,11 @@ export default function HomePage() {
                 your browser.
               </p>
             </div>
-            <Link href="/scan-to-pdf" className="landing-upload-button" aria-label="Upload files">
+            <LandingUploadButton>
               <UploadIcon />
               <span>Upload</span>
               <ChevronDownIcon />
-            </Link>
+            </LandingUploadButton>
           </div>
 
           <ToolGrid tools={popularTools} />

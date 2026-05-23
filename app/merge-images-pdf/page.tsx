@@ -6,6 +6,6 @@ const route = getRoute("/merge-images-pdf")!;
 
 export const metadata: Metadata = routeMetadata(route);
 
-export default function ScanToPdfPage() {
+export default function MergeImagesPdfPage() {
   return <ToolRoutePage route={route} />;
 }
