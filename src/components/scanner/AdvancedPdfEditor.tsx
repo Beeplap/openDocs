@@ -79,15 +79,18 @@ function getWatermarkTiles(width: number, height: number, text: string) {
   const letterCount = Math.max(1, Array.from(text).filter((char) => !/\s/.test(char)).length);
   const textWidth = estimateWatermarkTextWidth(text, fontSize);
   const minDimension = Math.min(width, height);
+  const densityFactor = clamp((letterCount - 2) / 10, 0, 1);
+  const horizontalGap = minDimension * (0.16 + densityFactor * 0.34) + fontSize * (1.2 + densityFactor * 2.3);
+  const verticalGap = minDimension * (0.04 + densityFactor * 0.16) + fontSize * (2.8 + densityFactor * 4.2);
   const stepX = clamp(
-    textWidth + minDimension * 0.28 + fontSize * Math.sqrt(letterCount) * 1.8,
-    minDimension * 0.58,
-    diagonal * 0.9
+    textWidth + horizontalGap,
+    minDimension * (0.26 + densityFactor * 0.24),
+    diagonal * (0.42 + densityFactor * 0.42)
   );
   const stepY = clamp(
-    fontSize * (4.8 + Math.min(7, letterCount / 5)) + minDimension * 0.08,
-    minDimension * 0.26,
-    minDimension * 0.62
+    verticalGap,
+    minDimension * (0.18 + densityFactor * 0.16),
+    minDimension * (0.34 + densityFactor * 0.28)
   );
   const tiles: { x: number; y: number }[] = [];
 
