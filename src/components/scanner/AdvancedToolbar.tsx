@@ -102,6 +102,7 @@ export default function AdvancedToolbar({
   onUpdateAnnotation,
 }: Props) {
   const selectedAnn = annotations.find((a) => a.id === selectedAnnotationId);
+  const hasWatermark = annotations.some((a) => a.kind === "watermark");
   const updateDrawSettings = (updates: Partial<DrawSettings>) => setDrawSettings({ ...drawSettings, ...updates });
   const drawColor = drawMode === "highlighter" ? drawSettings.highlighterColor : drawSettings.penColor;
   const drawRangeValue =
@@ -132,8 +133,8 @@ export default function AdvancedToolbar({
           {tools.map((tool) => (
             <ToolbarButton
               key={tool.id}
-              active={activeTool === tool.id}
-              title={tool.label}
+              active={tool.id === "watermark" ? hasWatermark : activeTool === tool.id}
+              title={tool.id === "watermark" && hasWatermark ? "Remove watermark" : tool.label}
               onClick={() => setActiveTool(tool.id)}
               icon={tool.icon}
             />

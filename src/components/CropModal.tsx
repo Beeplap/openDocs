@@ -233,7 +233,7 @@ export default function CropModal({ open, imageUrl, initialCrop, title, onCancel
     dragRef.current = null;
   }
 
-  async function handleApply() {
+  const handleApply = useCallback(async () => {
     if (!crop) return;
     setIsApplying(true);
     try {
@@ -241,7 +241,27 @@ export default function CropModal({ open, imageUrl, initialCrop, title, onCancel
     } finally {
       setIsApplying(false);
     }
-  }
+  }, [crop, onApply]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleConfirmKey = (e: KeyboardEvent) => {
+      const target = e.target;
+      if (target instanceof HTMLElement && target.closest("button,input,select,textarea")) return;
+      if (e.key === "Escape" && !isApplying) {
+        e.preventDefault();
+        onCancel();
+        return;
+      }
+      if (e.key !== "Enter" || !crop || isApplying) return;
+      e.preventDefault();
+      void handleApply();
+    };
+
+    window.addEventListener("keydown", handleConfirmKey);
+    return () => window.removeEventListener("keydown", handleConfirmKey);
+  }, [crop, handleApply, isApplying, onCancel, open]);
 
   if (!open) return null;
 

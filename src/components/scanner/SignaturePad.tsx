@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Props = {
   open: boolean;
@@ -124,13 +124,33 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
     lastPoint.current = null;
   }
 
-  function handleApply() {
+  const handleApply = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !hasStrokes) return;
     // Trim transparent edges for cleaner result
     const trimmed = trimCanvas(canvas);
     onApply(trimmed, { color: penColor, strokeWidth: penSize });
-  }
+  }, [hasStrokes, onApply, penColor, penSize]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleConfirmKey = (e: KeyboardEvent) => {
+      const target = e.target;
+      if (target instanceof HTMLElement && target.closest("button,input,select,textarea")) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Enter" || !hasStrokes) return;
+      e.preventDefault();
+      handleApply();
+    };
+
+    window.addEventListener("keydown", handleConfirmKey);
+    return () => window.removeEventListener("keydown", handleConfirmKey);
+  }, [handleApply, hasStrokes, onClose, open]);
 
   if (!open) return null;
 

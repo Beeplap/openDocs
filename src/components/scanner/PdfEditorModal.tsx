@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { CloseIcon, EditIcon, ResetIcon, RotateLeftIcon, RotateRightIcon } from "./icons";
 import { filterOptions } from "./types";
 import type { EditorBox, MergeMode, PageFilter, ScanItem, TransformHandle } from "./types";
@@ -50,6 +51,22 @@ export default function PdfEditorModal({
   handleTransformMove,
   endTransform,
 }: Props) {
+  useEffect(() => {
+    if (!open || pageIndex === null) return;
+
+    const handleConfirmKey = (e: KeyboardEvent) => {
+      const target = e.target;
+      if (target instanceof HTMLElement && target.closest("button,input,select,textarea")) return;
+      if (e.key === "Escape" || e.key === "Enter") {
+        e.preventDefault();
+        closePdfPageEditor();
+      }
+    };
+
+    window.addEventListener("keydown", handleConfirmKey);
+    return () => window.removeEventListener("keydown", handleConfirmKey);
+  }, [closePdfPageEditor, open, pageIndex]);
+
   if (!open || pageIndex === null) return null;
 
   function getPageSlotFrame(index: number) {

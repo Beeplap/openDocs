@@ -33,6 +33,7 @@ type AnnotationContextMenu = { x: number; y: number; annotationId: string | null
 const DEFAULT_TEXT_FONT = "Arial, Helvetica, sans-serif";
 const DEFAULT_SIGNATURE_COLOR = "#1a1a2e";
 const DEFAULT_TEXT = "Insert text here";
+const WATERMARK_ANGLE = -45;
 const DEFAULT_DRAW_SETTINGS: DrawSettings = {
   penColor: "#111827",
   penSize: 3,
@@ -53,6 +54,45 @@ function initialDrawModeForIntent(intent?: WorkspaceIntent): DrawMode {
   if (intent === "highlight") return "highlighter";
   if (intent === "erase") return "eraser";
   return "pen";
+}
+
+function watermarkFontSize(width: number, height: number) {
+  return clamp(Math.min(width, height) * 0.07, 28, 54);
+}
+
+function getWatermarkTiles(width: number, height: number, text: string) {
+  const diagonal = Math.hypot(width, height);
+  const fontSize = watermarkFontSize(width, height);
+  const stepX = Math.max(240, Math.min(520, fontSize * Math.max(5, text.length * 0.72)));
+  const stepY = Math.max(150, Math.min(320, fontSize * 3.3));
+  const tiles: { x: number; y: number }[] = [];
+
+  for (let y = -diagonal; y <= height + diagonal; y += stepY) {
+    for (let x = -diagonal; x <= width + diagonal; x += stepX) {
+      tiles.push({ x, y });
+    }
+  }
+
+  return { fontSize, tiles };
+}
+
+function drawWatermarkPattern(ctx: CanvasRenderingContext2D, text: string, width: number, height: number, opacity: number) {
+  const { fontSize, tiles } = getWatermarkTiles(width, height, text);
+  ctx.save();
+  ctx.fillStyle = `rgba(148,163,184,${opacity})`;
+  ctx.font = `bold italic ${fontSize}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  for (const tile of tiles) {
+    ctx.save();
+    ctx.translate(tile.x, tile.y);
+    ctx.rotate((WATERMARK_ANGLE * Math.PI) / 180);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  }
+
+  ctx.restore();
 }
 
 type Props = { onStatusMessage: (msg: string) => void; initialIntent?: WorkspaceIntent };
@@ -461,6 +501,14 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
         onStatusMessage("Upload a PDF before adding a watermark.");
         return;
       }
+      if (annotations.some((ann) => ann.kind === "watermark")) {
+        pushState(annotations.filter((ann) => ann.kind !== "watermark"), pages);
+        setShowWatermarkDialog(false);
+        setWatermarkText("");
+        setActiveTool("select");
+        onStatusMessage("Watermark removed.");
+        return;
+      }
       setShowWatermarkDialog(true);
       return;
     }
@@ -676,9 +724,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       kind: "watermark" as const, id: generateId(), pageIndex: i,
       text: watermarkText.trim(), opacity: 0.08,
     }));
-    pushState([...annotations, ...newAnns], pages);
+    const withoutWatermarks = annotations.filter((ann) => ann.kind !== "watermark");
+    pushState([...withoutWatermarks, ...newAnns], pages);
     setShowWatermarkDialog(false);
     setWatermarkText("");
+    setActiveTool("select");
     onStatusMessage("Repeating watermark applied to all pages.");
   }
 
@@ -822,16 +872,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
         const pageAnns = annotations.filter((a) => a.pageIndex === i);
         for (const ann of pageAnns) {
           if (ann.kind === "watermark") {
-            ctx.save();
-            ctx.fillStyle = `rgba(148,163,184,${ann.opacity})`;
-            ctx.font = "bold italic 48px sans-serif";
-            ctx.rotate((-45 * Math.PI) / 180);
-            for (let wx = -w; wx < w * 2; wx += 300) {
-              for (let wy = -h; wy < h * 2; wy += 200) {
-                ctx.fillText(ann.text, wx, wy);
-              }
-            }
-            ctx.restore();
+            drawWatermarkPattern(ctx, ann.text, w, h, ann.opacity);
           } else if (ann.kind === "ink") {
             ctx.save();
             drawInkPath(ctx, ann, w, h);
@@ -949,6 +990,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-slate-900 mb-3">Add Repeating Watermark</h3>
             <input type="text" value={watermarkText} onChange={(e) => setWatermarkText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || !watermarkText.trim()) return;
+                e.preventDefault();
+                handleWatermarkApply();
+              }}
               placeholder="Watermark text..." className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm mb-4" autoFocus />
             <div className="flex gap-3 justify-end">
               <button type="button" onClick={() => { setShowWatermarkDialog(false); setWatermarkText(""); }}
@@ -1241,13 +1287,31 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                     <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden opacity-[0.08]">
                       {annotations
                         .filter((a): a is Extract<AdvancedAnnotation, { kind: "watermark" }> => a.pageIndex === currentPage && a.kind === "watermark")
-                        .map(ann => (
-                         <div key={ann.id} className="absolute -inset-[100%] flex flex-wrap content-start" style={{ transform: "rotate(-45deg)" }}>
-                           {Array.from({length: 100}).map((_, i) => (
-                             <span key={i} className="text-4xl text-slate-500 font-bold italic m-10 whitespace-nowrap">{ann.text}</span>
-                           ))}
-                         </div>
-                        ))}
+                        .map((ann) => {
+                          const pageWidth = page!.rotation % 180 !== 0 ? page!.height : page!.width;
+                          const pageHeight = page!.rotation % 180 !== 0 ? page!.width : page!.height;
+                          const { fontSize, tiles } = getWatermarkTiles(pageWidth, pageHeight, ann.text);
+                          const previewFontSize = clamp((fontSize / Math.min(pageWidth, pageHeight)) * 100, 3.8, 7.2);
+
+                          return (
+                            <div key={ann.id} className="absolute inset-0">
+                              {tiles.map((tile, index) => (
+                                <span
+                                  key={`${ann.id}-${index}`}
+                                  className="absolute whitespace-nowrap font-bold italic text-slate-500"
+                                  style={{
+                                    left: `${(tile.x / pageWidth) * 100}%`,
+                                    top: `${(tile.y / pageHeight) * 100}%`,
+                                    fontSize: `clamp(1.5rem, ${previewFontSize}vmin, 3.4rem)`,
+                                    transform: `translate(-50%, -50%) rotate(${WATERMARK_ANGLE}deg)`,
+                                  }}
+                                >
+                                  {ann.text}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })}
                     </div>
 
                     {/* Highlight drawing preview */}
