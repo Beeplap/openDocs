@@ -168,6 +168,29 @@ textarea {
   color: var(--tooltip-text);
 }
 
+.mega-drawer {
+  contain: layout;
+}
+
+.drawer-link {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tool-link-label {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-tooltip {
+  white-space: normal;
+}
+
 .page-intro {
   background: var(--surface-strong);
   border-color: var(--line);
@@ -296,11 +319,6 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.drawer-link {
-  min-width: 0;
-  overflow: hidden;
 }
 
 [data-theme="dark"] .bg-white,

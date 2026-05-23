@@ -25,7 +25,8 @@ const primaryNav = [
 
 type DrawerMode = "all" | ToolSectionId | "sign" | null;
 type DrawerAnchor = { left: number } | null;
-const COMPACT_DRAWER_WIDTH = 560;
+const ALL_DRAWER_WIDTH = 1360;
+const WIDE_COMPACT_DRAWER_WIDTH = 640;
 
 const signGroup: ToolNavGroup = {
   id: "edit",
@@ -66,7 +67,7 @@ export default function ToolMegaMenu() {
     const wrapRect = wrap.getBoundingClientRect();
     const nodeRect = node.getBoundingClientRect();
     const panelWidth =
-      mode === "all" ? Math.min(1120, window.innerWidth - 32) : Math.min(COMPACT_DRAWER_WIDTH, window.innerWidth - 32);
+      mode === "all" ? Math.min(ALL_DRAWER_WIDTH, window.innerWidth - 32) : Math.min(WIDE_COMPACT_DRAWER_WIDTH, window.innerWidth - 32);
     const centeredLeft = nodeRect.left - wrapRect.left + nodeRect.width / 2 - panelWidth / 2;
     const maxLeft = Math.max(16, wrapRect.width - panelWidth - 16);
     setDrawerAnchor({ left: Math.min(Math.max(16, centeredLeft), maxLeft) });
@@ -173,17 +174,17 @@ export default function ToolMegaMenu() {
         {drawerGroups.length > 0 ? (
           <div
             className={`mega-drawer absolute top-full z-50 max-h-[calc(100vh-5rem)] overflow-auto rounded-b-lg border border-t-0 px-5 py-5 shadow-2xl ${
-              drawerMode === "all" ? "w-[min(1120px,calc(100vw-2rem))]" : "w-[min(560px,calc(100vw-2rem))]"
+              drawerMode === "all" ? "w-[min(1360px,calc(100vw-2rem))]" : "w-[min(640px,calc(100vw-2rem))]"
             }`}
             style={{ left: drawerAnchor?.left ?? 16 }}
           >
             <div className={`grid gap-x-8 gap-y-6 ${drawerMode === "all" ? "sm:grid-cols-2 lg:grid-cols-5" : "grid-cols-2"}`}>
               {drawerGroups.map((group) => (
-                <section key={group.id} aria-labelledby={`tool-group-${group.id}`} className={drawerMode === "all" ? "" : "col-span-2"}>
+                <section key={group.id} aria-labelledby={`tool-group-${group.id}`} className={`min-w-0 ${drawerMode === "all" ? "" : "col-span-2"}`}>
                   <h2 id={`tool-group-${group.id}`} className="drawer-heading mb-3 text-sm font-semibold">
                     {group.label}
                   </h2>
-                  <div className={`grid gap-2 ${drawerMode === "all" ? "" : "grid-cols-2"}`}>
+                  <div className={`grid min-w-0 gap-2 ${drawerMode === "all" ? "" : "grid-cols-2"}`}>
                     {group.items.map((path) => {
                       const route = getRoute(path);
                       if (!route) return null;
@@ -194,7 +195,7 @@ export default function ToolMegaMenu() {
                           href={route.path}
                           onClick={() => setDrawerMode(null)}
                           data-active={current}
-                          className="tool-link drawer-link relative flex items-center gap-3 rounded-md px-2.5 py-2 transition"
+                          className="tool-link drawer-link relative flex h-12 w-full items-center gap-3 rounded-md px-2.5 transition"
                         >
                           <span
                             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[11px] font-bold text-white ${
@@ -209,8 +210,8 @@ export default function ToolMegaMenu() {
                               .join("")
                               .toUpperCase()}
                           </span>
-                          <span className="min-w-0 truncate text-sm font-medium">{route.title}</span>
-                          <span className="tool-tooltip pointer-events-none absolute left-10 top-[calc(100%+6px)] z-[60] hidden w-64 rounded-md px-3 py-2 text-center text-xs font-medium leading-5 shadow-lg">
+                          <span className="tool-link-label text-sm font-medium">{route.title}</span>
+                          <span className="tool-tooltip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-[60] hidden w-72 -translate-x-1/2 rounded-md px-3 py-2 text-center text-xs font-medium leading-5 shadow-lg">
                             {route.description}
                           </span>
                         </Link>
