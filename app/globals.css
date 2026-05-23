@@ -244,6 +244,7 @@ textarea {
 
 .landing-tool-card {
   display: flex;
+  min-width: 0;
   min-height: 5.75rem;
   align-items: center;
   gap: 0.875rem;
@@ -282,6 +283,26 @@ textarea {
   line-height: 1;
 }
 
+.landing-tool-content {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.landing-tool-title,
+.landing-tool-description {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-link {
+  min-width: 0;
+  overflow: hidden;
+}
+
 [data-theme="dark"] .bg-white,
 [data-theme="dark"] .bg-slate-50 {
   background-color: var(--surface);
@@ -314,4 +335,74 @@ textarea {
   background-color: var(--surface);
   color: var(--foreground);
   border-color: var(--line);
+}
+
+.pdf-text-editor,
+[data-theme="dark"] .pdf-text-editor {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  caret-color: currentColor;
+  border: 1px solid rgba(37, 99, 235, 0.45) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.36) inset;
+}
+
+.pdf-text-editor:focus {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+[data-theme="dark"] .hover\:bg-slate-50:hover,
+[data-theme="dark"] .hover\:bg-slate-100:hover,
+[data-theme="dark"] .hover\:bg-slate-200:hover {
+  background-color: var(--hover);
+}
+
+[data-theme="dark"] .hover\:bg-white:hover {
+  background-color: var(--surface);
+}
+
+[data-theme="dark"] .hover\:bg-blue-50:hover,
+[data-theme="dark"] .hover\:bg-blue-100:hover,
+[data-theme="dark"] .hover\:bg-sky-50:hover {
+  background-color: rgba(56, 189, 248, 0.14);
+}
+
+[data-theme="dark"] .hover\:bg-emerald-50:hover,
+[data-theme="dark"] .hover\:bg-emerald-100:hover,
+[data-theme="dark"] .hover\:bg-emerald-50\/50:hover {
+  background-color: rgba(16, 185, 129, 0.14);
+}
+
+[data-theme="dark"] .hover\:bg-rose-50:hover,
+[data-theme="dark"] .hover\:bg-rose-100:hover,
+[data-theme="dark"] .hover\:bg-red-50:hover {
+  background-color: rgba(244, 63, 94, 0.14);
+}
+
+[data-theme="dark"] .bg-blue-50,
+[data-theme="dark"] .bg-blue-100 {
+  background-color: rgba(56, 189, 248, 0.16);
+}
+
+[data-theme="dark"] .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.16);
+}
+
+[data-theme="dark"] .bg-rose-50,
+[data-theme="dark"] .bg-red-50 {
+  background-color: rgba(244, 63, 94, 0.16);
+}
+
+[data-theme="dark"] .text-blue-600,
+[data-theme="dark"] .text-blue-700 {
+  color: #7dd3fc;
+}
+
+[data-theme="dark"] .text-emerald-700,
+[data-theme="dark"] .text-emerald-800 {
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .text-rose-600,
+[data-theme="dark"] .text-rose-700,
+[data-theme="dark"] .text-red-600 {
+  color: #fb7185;
 }

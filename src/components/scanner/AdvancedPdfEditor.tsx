@@ -977,6 +977,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                   setUnlockPassword(e.target.value);
                   setUnlockError("");
                 }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || !currentPdfFile || !unlockPassword.trim() || isLoading) return;
+                  e.preventDefault();
+                  void unlockPdf();
+                }}
                 className="mt-2 block w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-300"
                 autoFocus
               />
@@ -1023,6 +1028,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                   onChange={(e) => {
                     setProtectPassword(e.target.value);
                     if (protectOnDownload) setProtectOnDownload(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || !protectPassword.trim() || isExporting) return;
+                    e.preventDefault();
+                    protectPdf();
                   }}
                   className="min-w-0 flex-1 px-4 py-2.5 text-sm outline-none"
                   autoFocus
@@ -1345,7 +1355,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                                         fontWeight: ann.bold ? "bold" : "normal", fontStyle: ann.italic ? "italic" : "normal",
                                         lineHeight: 1.2
                                       }}
-                                      className="h-full w-full resize-none overflow-hidden border-none bg-sky-50/70 p-1 m-0 outline-none"
+                                      className="pdf-text-editor h-full w-full resize-none overflow-hidden border-none bg-sky-50/70 p-1 m-0 outline-none"
                                     />
                                   ) : (
                                     <div

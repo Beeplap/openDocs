@@ -101,9 +101,9 @@ function ToolGrid({ tools }: { tools: NonNullable<ReturnType<typeof getRoute>>[]
             <span className={`landing-tool-icon ${sectionTone[tool.mode]}`} aria-hidden="true">
               {toolInitials(label)}
             </span>
-            <span className="min-w-0">
-              <span className="block truncate text-lg font-bold">{label}</span>
-              <span className="mt-1 block truncate text-sm">{tool.description}</span>
+            <span className="landing-tool-content">
+              <span className="landing-tool-title text-lg font-bold">{label}</span>
+              <span className="landing-tool-description mt-1 text-sm">{tool.description}</span>
             </span>
           </Link>
         );
