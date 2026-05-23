@@ -88,7 +88,7 @@ export const toolRoutes: ToolRoute[] = [
   },
   {
     path: "/merge-pdfs/reorder-pages",
-    title: "Reorder PDF files before merging",
+    title: "Reorder PDF files",
     description: "Drag PDF files into the right order before merging.",
     mode: "pdf",
     priority: 0.78,
