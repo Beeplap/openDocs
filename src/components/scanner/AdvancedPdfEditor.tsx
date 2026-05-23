@@ -30,6 +30,9 @@ type PageData = { dataUrl: string; width: number; height: number; rotation: numb
 type HistoryEntry = { annotations: AdvancedAnnotation[]; pages: PageData[]; };
 type EditableAnnotation = Exclude<AdvancedAnnotation, { kind: "watermark" }>;
 type AnnotationContextMenu = { x: number; y: number; annotationId: string | null };
+type PdfPickerAction = "edit" | "unlock" | "flatten";
+type ExportOptions = { forceFlatten?: boolean; forceProtect?: boolean };
+type ExportPdfFn = (filename?: string, success?: string, options?: ExportOptions) => Promise<void>;
 
 const DEFAULT_TEXT_FONT = "Arial, Helvetica, sans-serif";
 const DEFAULT_SIGNATURE_COLOR = "#1a1a2e";
@@ -61,11 +64,31 @@ function watermarkFontSize(width: number, height: number) {
   return clamp(Math.min(width, height) * 0.07, 28, 54);
 }
 
+function estimateWatermarkTextWidth(text: string, fontSize: number) {
+  return Array.from(text).reduce((width, char) => {
+    if (/\s/.test(char)) return width + fontSize * 0.34;
+    if (/[ilI1|.,'`]/.test(char)) return width + fontSize * 0.32;
+    if (/[MW@#%&]/.test(char)) return width + fontSize * 0.9;
+    return width + fontSize * 0.62;
+  }, 0);
+}
+
 function getWatermarkTiles(width: number, height: number, text: string) {
   const diagonal = Math.hypot(width, height);
   const fontSize = watermarkFontSize(width, height);
-  const stepX = Math.max(240, Math.min(520, fontSize * Math.max(5, text.length * 0.72)));
-  const stepY = Math.max(150, Math.min(320, fontSize * 3.3));
+  const letterCount = Math.max(1, Array.from(text).filter((char) => !/\s/.test(char)).length);
+  const textWidth = estimateWatermarkTextWidth(text, fontSize);
+  const minDimension = Math.min(width, height);
+  const stepX = clamp(
+    textWidth + minDimension * 0.28 + fontSize * Math.sqrt(letterCount) * 1.8,
+    minDimension * 0.58,
+    diagonal * 0.9
+  );
+  const stepY = clamp(
+    fontSize * (4.8 + Math.min(7, letterCount / 5)) + minDimension * 0.08,
+    minDimension * 0.26,
+    minDimension * 0.62
+  );
   const tiles: { x: number; y: number }[] = [];
 
   for (let y = -diagonal; y <= height + diagonal; y += stepY) {
@@ -143,6 +166,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const scrollSyncFrameRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadModeRef = useRef<"replace" | "append">("replace");
+  const fileActionRef = useRef<PdfPickerAction>("edit");
+  const autoExportAfterLoadRef = useRef<Exclude<PdfPickerAction, "edit"> | null>(null);
+  const exportPdfRef = useRef<ExportPdfFn | null>(null);
   const eraserSessionRef = useRef<{ deletedIds: Set<string>; baseAnnotations: AdvancedAnnotation[] } | null>(null);
   const pageSortSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -359,7 +385,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       setShowUnlockDialog(false);
       setUnlockPassword("");
       setUnlockError("");
-      if (initialIntent === "protect") setShowProtectDialog(true);
+      if (initialIntent === "protect" && !autoExportAfterLoadRef.current) setShowProtectDialog(true);
       if (initialIntent === "add-watermark") setShowWatermarkDialog(true);
       return true;
     } catch {
@@ -397,6 +423,13 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
 
   function openPdfPicker(mode: "replace" | "append") {
     uploadModeRef.current = mode;
+    fileActionRef.current = "edit";
+    fileInputRef.current?.click();
+  }
+
+  function openSecurePdfPicker(action: Exclude<PdfPickerAction, "edit">) {
+    uploadModeRef.current = "replace";
+    fileActionRef.current = action;
     fileInputRef.current?.click();
   }
 
@@ -404,7 +437,13 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     const f = e.target.files?.[0];
     if (!f) return;
     const mode = uploadModeRef.current;
-    void loadPdf(f, undefined, { append: mode === "append" });
+    const action = fileActionRef.current;
+    fileActionRef.current = "edit";
+    if (action === "unlock" || action === "flatten") {
+      autoExportAfterLoadRef.current = action;
+      if (action === "flatten") setFlattenOnDownload(true);
+    }
+    void loadPdf(f, undefined, { append: action === "edit" && mode === "append" });
     e.target.value = "";
   }
 
@@ -791,7 +830,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     if (!watermarkText.trim()) return;
     const newAnns: AdvancedAnnotation[] = pages.map((_, i) => ({
       kind: "watermark" as const, id: generateId(), pageIndex: i,
-      text: watermarkText.trim(), opacity: 0.08,
+      text: watermarkText.trim(), opacity: 0.055,
     }));
     const withoutWatermarks = annotations.filter((ann) => ann.kind !== "watermark");
     pushState([...withoutWatermarks, ...newAnns], pages);
@@ -991,24 +1030,26 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     return pages.every((page, index) => page.id === originalPageIds[index] && page.rotation % 360 === 0);
   }
 
-  async function exportPdf(filename = "opendocs-edited.pdf", success = "PDF exported successfully.") {
+  async function exportPdf(filename = "opendocs-edited.pdf", success = "PDF exported successfully.", options: ExportOptions = {}) {
     if (pages.length === 0) return;
+    const shouldProtect = options.forceProtect ?? protectOnDownload;
+    const shouldFlatten = options.forceFlatten ?? flattenOnDownload;
     setIsExporting(true);
-    onStatusMessage(protectOnDownload ? "Protecting PDF..." : "Exporting PDF...");
+    onStatusMessage(shouldProtect ? "Protecting PDF..." : "Exporting PDF...");
     try {
       const sourceBytes =
-        protectOnDownload && !flattenOnDownload && canProtectOriginalPdf()
+        shouldProtect && !shouldFlatten && canProtectOriginalPdf()
           ? new Uint8Array(await currentPdfFile!.arrayBuffer())
           : await renderCurrentPdfBytes();
-      const outputBytes = protectOnDownload ? await encryptPDF(sourceBytes, protectPassword.trim()) : sourceBytes;
-      const outputName = protectOnDownload
+      const outputBytes = shouldProtect ? await encryptPDF(sourceBytes, protectPassword.trim()) : sourceBytes;
+      const outputName = shouldProtect
         ? "opendocs-protected.pdf"
-        : flattenOnDownload
+        : shouldFlatten
           ? "opendocs-flattened.pdf"
           : filename;
       downloadPdfBytes(outputBytes, outputName);
       onStatusMessage(
-        protectOnDownload ? "Protected PDF downloaded." : flattenOnDownload ? "Flattened PDF downloaded." : success
+        shouldProtect ? "Protected PDF downloaded." : shouldFlatten ? "Flattened PDF downloaded." : success
       );
     } catch {
       onStatusMessage("Export failed.");
@@ -1016,6 +1057,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       setIsExporting(false);
     }
   }
+  exportPdfRef.current = exportPdf;
 
   function toggleFlattenPdf() {
     if (pages.length === 0) {
@@ -1046,6 +1088,19 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     const loaded = await loadPdf(file, unlockPassword.trim(), { append: uploadModeRef.current === "append" });
     if (loaded) onStatusMessage("Unlocked PDF loaded. Download it to save an unlocked copy.");
   }
+
+  useEffect(() => {
+    const action = autoExportAfterLoadRef.current;
+    if (!action || isLoading || isExporting || pages.length === 0) return;
+
+    autoExportAfterLoadRef.current = null;
+    if (action === "flatten") {
+      void exportPdfRef.current?.("opendocs-flattened.pdf", "Flattened PDF downloaded.", { forceFlatten: true });
+      return;
+    }
+
+    void exportPdfRef.current?.("opendocs-unlocked.pdf", "Unlocked PDF downloaded.");
+  }, [isExporting, isLoading, pages.length]);
 
   const page = pages[currentPage] ?? null;
   const canUndo = historyIndex > 0;
@@ -1489,14 +1544,36 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       {!page && !isLoading ? (
         <div className="flex-1 bg-white p-6 lg:p-12 overflow-y-auto w-full">
           <div className="mx-auto max-w-4xl">
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900">PDF Editor</h1>
               </div>
-              <button type="button" onClick={() => openPdfPicker("replace")}
-                className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition">
-                Add PDF
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {initialIntent === "protect" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openSecurePdfPicker("unlock")}
+                      disabled={isLoading || isExporting}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Unlock PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openSecurePdfPicker("flatten")}
+                      disabled={isLoading || isExporting}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Flatten PDF
+                    </button>
+                  </>
+                ) : null}
+                <button type="button" onClick={() => openPdfPicker("replace")}
+                  className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition">
+                  Add PDF
+                </button>
+              </div>
             </div>
 
             <div 
