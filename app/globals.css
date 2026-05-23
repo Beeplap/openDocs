@@ -199,3 +199,119 @@ textarea {
   background: var(--accent);
   color: var(--surface-strong);
 }
+
+.landing-page {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.landing-page p,
+.landing-tool-card span span:last-child {
+  color: var(--muted);
+}
+
+.landing-upload-button {
+  display: inline-flex;
+  min-height: 3.125rem;
+  align-items: center;
+  gap: 0.625rem;
+  align-self: flex-start;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--surface-strong);
+  padding: 0 1rem;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18);
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.landing-upload-button svg:last-child {
+  margin-left: 0.375rem;
+  padding-left: 0.75rem;
+  box-sizing: content-box;
+  border-left: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.landing-upload-button:hover,
+.landing-upload-button:focus-visible {
+  background: var(--brand-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.24);
+}
+
+.landing-tool-card {
+  display: flex;
+  min-height: 5.75rem;
+  align-items: center;
+  gap: 0.875rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  border-radius: 5px;
+  background: var(--surface-strong);
+  color: var(--foreground);
+  padding: 1rem 1.875rem;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.landing-tool-card:hover,
+.landing-tool-card:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.landing-tool-icon {
+  display: inline-flex;
+  height: 1.875rem;
+  width: 1.875rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-slate-50 {
+  background-color: var(--surface);
+}
+
+[data-theme="dark"] .bg-slate-100 {
+  background-color: var(--background);
+}
+
+[data-theme="dark"] .text-slate-950,
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-slate-800,
+[data-theme="dark"] .text-slate-700 {
+  color: var(--foreground);
+}
+
+[data-theme="dark"] .text-slate-600,
+[data-theme="dark"] .text-slate-500 {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .border-slate-300,
+[data-theme="dark"] .border-slate-200 {
+  border-color: var(--line);
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--surface);
+  color: var(--foreground);
+  border-color: var(--line);
+}

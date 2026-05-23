@@ -112,6 +112,12 @@ function writeUint32(view: DataView, offset: number, value: number) {
   view.setUint32(offset, value, true);
 }
 
+function toArrayBuffer(bytes: Uint8Array) {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 async function createZipBlob(entries: { blob: Blob; fileName: string }[]) {
   const encoder = new TextEncoder();
   const fileParts: Uint8Array[] = [];
@@ -177,7 +183,8 @@ async function createZipBlob(entries: { blob: Blob; fileName: string }[]) {
   writeUint32(endView, 16, offset);
   writeUint16(endView, 20, 0);
 
-  return new Blob([...fileParts, ...centralParts, endHeader], { type: "application/zip" });
+  const zipParts = [...fileParts, ...centralParts, endHeader].map(toArrayBuffer);
+  return new Blob(zipParts, { type: "application/zip" });
 }
 
 export default function ImageConverter() {
