@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import ThemeToggle from "./ThemeToggle";
 import type { ToolNavGroup, ToolSectionId } from "../lib/siteRoutes";
 import { getRoute, toolNavGroups } from "../lib/siteRoutes";
 
@@ -107,7 +108,7 @@ export default function ToolMegaMenu() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <header className="site-header sticky top-0 z-40 border-b backdrop-blur">
       <div
         ref={navWrapRef}
         className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
@@ -115,62 +116,63 @@ export default function ToolMegaMenu() {
         onMouseLeave={scheduleClose}
       >
         <div className="flex min-h-16 flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <Link href="/" className="text-lg font-semibold tracking-tight text-slate-950">
+          <Link href="/" className="site-brand text-lg font-semibold tracking-tight">
             Opendocs
           </Link>
 
-          <nav className="flex flex-wrap items-center gap-1.5" aria-label="Document tools">
-            <button
-              type="button"
-              onClick={(event) => toggleDrawer("all", event.currentTarget)}
-              onMouseEnter={(event) => startHoverOpen("all", event.currentTarget)}
-              onMouseLeave={clearOpenTimer}
-              onPointerEnter={(event) => startHoverOpen("all", event.currentTarget)}
-              onPointerLeave={clearOpenTimer}
-              onFocus={(event) => startHoverOpen("all", event.currentTarget)}
-              onBlur={clearOpenTimer}
-              aria-expanded={drawerMode === "all"}
-              className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition ${
-                drawerMode === "all" ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
-              }`}
-            >
-              <span className="grid grid-cols-3 gap-0.5" aria-hidden="true">
-                {Array.from({ length: 9 }).map((_, index) => (
-                  <span key={index} className="h-1.5 w-1.5 rounded-[2px] bg-current" />
-                ))}
-              </span>
-              All Tools
-              <ChevronDownIcon className={`h-3.5 w-3.5 transition ${drawerMode === "all" ? "rotate-180" : ""}`} />
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <nav className="flex flex-wrap items-center gap-1.5" aria-label="Document tools">
+              <button
+                type="button"
+                onClick={(event) => toggleDrawer("all", event.currentTarget)}
+                onMouseEnter={(event) => startHoverOpen("all", event.currentTarget)}
+                onMouseLeave={clearOpenTimer}
+                onPointerEnter={(event) => startHoverOpen("all", event.currentTarget)}
+                onPointerLeave={clearOpenTimer}
+                onFocus={(event) => startHoverOpen("all", event.currentTarget)}
+                onBlur={clearOpenTimer}
+                aria-expanded={drawerMode === "all"}
+                data-active={drawerMode === "all"}
+                className="site-nav-item inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition"
+              >
+                <span className="grid grid-cols-3 gap-0.5" aria-hidden="true">
+                  {Array.from({ length: 9 }).map((_, index) => (
+                    <span key={index} className="h-1.5 w-1.5 rounded-[2px] bg-current" />
+                  ))}
+                </span>
+                All Tools
+                <ChevronDownIcon className={`h-3.5 w-3.5 transition ${drawerMode === "all" ? "rotate-180" : ""}`} />
+              </button>
 
-            {primaryNav.map((item) => {
-              const active = item.activePrefix ? pathname.startsWith(item.activePrefix) : pathname === item.href;
-              const expanded = drawerMode === item.drawer;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setDrawerMode(null)}
-                  onMouseEnter={(event) => startHoverOpen(item.drawer as Exclude<DrawerMode, null>, event.currentTarget)}
-                  onMouseLeave={clearOpenTimer}
-                  onPointerEnter={(event) => startHoverOpen(item.drawer as Exclude<DrawerMode, null>, event.currentTarget)}
-                  onPointerLeave={clearOpenTimer}
-                  onFocus={(event) => startHoverOpen(item.drawer as Exclude<DrawerMode, null>, event.currentTarget)}
-                  onBlur={clearOpenTimer}
-                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                    active || expanded ? "text-blue-700" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+              {primaryNav.map((item) => {
+                const active = item.activePrefix ? pathname.startsWith(item.activePrefix) : pathname === item.href;
+                const expanded = drawerMode === item.drawer;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setDrawerMode(null)}
+                    onMouseEnter={(event) => startHoverOpen(item.drawer as Exclude<DrawerMode, null>, event.currentTarget)}
+                    onMouseLeave={clearOpenTimer}
+                    onPointerEnter={(event) => startHoverOpen(item.drawer as Exclude<DrawerMode, null>, event.currentTarget)}
+                    onPointerLeave={clearOpenTimer}
+                    onFocus={(event) => startHoverOpen(item.drawer as Exclude<DrawerMode, null>, event.currentTarget)}
+                    onBlur={clearOpenTimer}
+                    data-active={active || expanded}
+                    className="site-nav-item rounded-md px-3 py-2 text-sm font-semibold transition"
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <ThemeToggle />
+          </div>
         </div>
 
         {drawerGroups.length > 0 ? (
           <div
-            className={`absolute top-full z-50 max-h-[calc(100vh-5rem)] overflow-auto rounded-b-lg border border-t-0 border-slate-200 bg-white px-5 py-5 shadow-2xl ${
+            className={`mega-drawer absolute top-full z-50 max-h-[calc(100vh-5rem)] overflow-auto rounded-b-lg border border-t-0 px-5 py-5 shadow-2xl ${
               drawerMode === "all" ? "w-[min(1120px,calc(100vw-2rem))]" : "w-[min(560px,calc(100vw-2rem))]"
             }`}
             style={{ left: drawerAnchor?.left ?? 16 }}
@@ -178,7 +180,7 @@ export default function ToolMegaMenu() {
             <div className={`grid gap-x-8 gap-y-6 ${drawerMode === "all" ? "sm:grid-cols-2 lg:grid-cols-5" : "grid-cols-2"}`}>
               {drawerGroups.map((group) => (
                 <section key={group.id} aria-labelledby={`tool-group-${group.id}`} className={drawerMode === "all" ? "" : "col-span-2"}>
-                  <h2 id={`tool-group-${group.id}`} className="mb-3 text-sm font-semibold text-slate-500">
+                  <h2 id={`tool-group-${group.id}`} className="drawer-heading mb-3 text-sm font-semibold">
                     {group.label}
                   </h2>
                   <div className={`grid gap-2 ${drawerMode === "all" ? "" : "grid-cols-2"}`}>
@@ -191,9 +193,8 @@ export default function ToolMegaMenu() {
                           key={route.path}
                           href={route.path}
                           onClick={() => setDrawerMode(null)}
-                          className={`tool-link relative flex items-center gap-3 rounded-md px-2.5 py-2 transition ${
-                            current ? "bg-blue-50 text-blue-700" : "text-slate-800 hover:bg-slate-50"
-                          }`}
+                          data-active={current}
+                          className="tool-link drawer-link relative flex items-center gap-3 rounded-md px-2.5 py-2 transition"
                         >
                           <span
                             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[11px] font-bold text-white ${
@@ -209,7 +210,7 @@ export default function ToolMegaMenu() {
                               .toUpperCase()}
                           </span>
                           <span className="min-w-0 truncate text-sm font-medium">{route.title}</span>
-                          <span className="tool-tooltip pointer-events-none absolute left-10 top-[calc(100%+6px)] z-[60] hidden w-64 rounded-md bg-slate-950 px-3 py-2 text-center text-xs font-medium leading-5 text-white shadow-lg">
+                          <span className="tool-tooltip pointer-events-none absolute left-10 top-[calc(100%+6px)] z-[60] hidden w-64 rounded-md px-3 py-2 text-center text-xs font-medium leading-5 shadow-lg">
                             {route.description}
                           </span>
                         </Link>

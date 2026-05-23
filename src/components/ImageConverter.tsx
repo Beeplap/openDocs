@@ -12,6 +12,8 @@ const outputOptions: { label: string; value: OutputFormat }[] = [
   { label: "WEBP", value: "image/webp" },
 ];
 
+type DownloadMode = "zip" | "separate";
+
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -86,6 +88,98 @@ function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(downloadUrl);
 }
 
+const crcTable = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  return value >>> 0;
+});
+
+function crc32(bytes: Uint8Array) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeUint16(view: DataView, offset: number, value: number) {
+  view.setUint16(offset, value, true);
+}
+
+function writeUint32(view: DataView, offset: number, value: number) {
+  view.setUint32(offset, value, true);
+}
+
+async function createZipBlob(entries: { blob: Blob; fileName: string }[]) {
+  const encoder = new TextEncoder();
+  const fileParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBytes = encoder.encode(entry.fileName);
+    const fileBytes = new Uint8Array(await entry.blob.arrayBuffer());
+    const checksum = crc32(fileBytes);
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+
+    writeUint32(localView, 0, 0x04034b50);
+    writeUint16(localView, 4, 20);
+    writeUint16(localView, 6, 0);
+    writeUint16(localView, 8, 0);
+    writeUint16(localView, 10, 0);
+    writeUint16(localView, 12, 0);
+    writeUint32(localView, 14, checksum);
+    writeUint32(localView, 18, fileBytes.length);
+    writeUint32(localView, 22, fileBytes.length);
+    writeUint16(localView, 26, nameBytes.length);
+    writeUint16(localView, 28, 0);
+    localHeader.set(nameBytes, 30);
+
+    fileParts.push(localHeader, fileBytes);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    writeUint32(centralView, 0, 0x02014b50);
+    writeUint16(centralView, 4, 20);
+    writeUint16(centralView, 6, 20);
+    writeUint16(centralView, 8, 0);
+    writeUint16(centralView, 10, 0);
+    writeUint16(centralView, 12, 0);
+    writeUint16(centralView, 14, 0);
+    writeUint32(centralView, 16, checksum);
+    writeUint32(centralView, 20, fileBytes.length);
+    writeUint32(centralView, 24, fileBytes.length);
+    writeUint16(centralView, 28, nameBytes.length);
+    writeUint16(centralView, 30, 0);
+    writeUint16(centralView, 32, 0);
+    writeUint16(centralView, 34, 0);
+    writeUint16(centralView, 36, 0);
+    writeUint32(centralView, 38, 0);
+    writeUint32(centralView, 42, offset);
+    centralHeader.set(nameBytes, 46);
+    centralParts.push(centralHeader);
+
+    offset += localHeader.length + fileBytes.length;
+  }
+
+  const centralSize = centralParts.reduce((size, part) => size + part.length, 0);
+  const endHeader = new Uint8Array(22);
+  const endView = new DataView(endHeader.buffer);
+  writeUint32(endView, 0, 0x06054b50);
+  writeUint16(endView, 4, 0);
+  writeUint16(endView, 6, 0);
+  writeUint16(endView, 8, entries.length);
+  writeUint16(endView, 10, entries.length);
+  writeUint32(endView, 12, centralSize);
+  writeUint32(endView, 16, offset);
+  writeUint16(endView, 20, 0);
+
+  return new Blob([...fileParts, ...centralParts, endHeader], { type: "application/zip" });
+}
+
 export default function ImageConverter() {
   const [file, setFile] = React.useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
@@ -96,10 +190,13 @@ export default function ImageConverter() {
   const [status, setStatus] = React.useState("Upload an image or PDF to start.");
   const [warning, setWarning] = React.useState<string | null>(null);
   const [pdfPageCount, setPdfPageCount] = React.useState<number | null>(null);
+  const [downloadMode, setDownloadMode] = React.useState<DownloadMode>("zip");
   const previewRunRef = React.useRef(0);
 
   const inputFormat = file ? detectInputFormat(file) : null;
   const isCompression = !!file && inputFormat === outputFormat;
+  const expectsMultipleOutputs =
+    inputFormat === "application/pdf" && outputFormat !== "application/pdf" && (pdfPageCount ?? 0) > 1;
   const estimatedOutputSize = React.useMemo(() => {
     if (!file) return null;
     return estimateOutputSize(file, outputFormat, quality, pdfPageCount);
@@ -116,6 +213,7 @@ export default function ImageConverter() {
     setQuality(nextFile && detectInputFormat(nextFile) === nextFormat ? 0.7 : 1);
     setOutputSize(null);
     setWarning(null);
+    setDownloadMode("zip");
   }
 
   function onFileSelected(nextFile: File) {
@@ -131,6 +229,7 @@ export default function ImageConverter() {
     setWarning(null);
     setOutputFormat(nextOutputFormat);
     setQuality(detectInputFormat(nextFile) === nextOutputFormat ? 0.7 : 1);
+    setDownloadMode("zip");
     setStatus("Choose an output format and quality.");
 
     if (detectInputFormat(nextFile) === "application/pdf") {
@@ -165,14 +264,27 @@ export default function ImageConverter() {
       if (result.warning) setWarning(result.warning);
 
       const baseName = file.name.replace(/\.[^/.]+$/, "");
-      result.outputs.forEach((output) => {
-        const pageSuffix = result.outputs.length > 1 && output.pageIndex ? `-page-${output.pageIndex}` : "";
-        downloadBlob(output.blob, `${baseName}${pageSuffix}-opendocs.${extensionFromMime(output.outputFormat)}`);
+      const namedOutputs = result.outputs.map((output, index) => {
+        const extension = extensionFromMime(output.outputFormat);
+        const outputName =
+          result.outputs.length > 1 ? `${index + 1}.${baseName}.${extension}` : `${baseName}-opendocs.${extension}`;
+        return { ...output, fileName: outputName };
       });
+
+      if (namedOutputs.length > 1 && downloadMode === "zip") {
+        const zipBlob = await createZipBlob(namedOutputs);
+        downloadBlob(zipBlob, `${baseName}-opendocs.zip`);
+      } else {
+        namedOutputs.forEach((output) => {
+          downloadBlob(output.blob, output.fileName);
+        });
+      }
 
       setStatus(
         result.outputs.length > 1
-          ? `${isCompression ? "Compressed" : "Converted"} ${result.outputs.length} files.`
+          ? `${isCompression ? "Compressed" : "Converted"} ${result.outputs.length} files ${
+              downloadMode === "zip" ? "in a ZIP." : "separately."
+            }`
           : `${isCompression ? "Compressed" : "Converted"} file downloaded.`
       );
     } catch {
@@ -262,6 +374,36 @@ export default function ImageConverter() {
             </label>
 
             {warning ? <p className="mt-3 text-sm font-medium text-amber-700">{warning}</p> : null}
+
+            {expectsMultipleOutputs ? (
+              <fieldset className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <legend className="px-1 text-sm font-semibold text-slate-800">Download multiple files</legend>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                    <input
+                      type="radio"
+                      name="download-mode"
+                      value="zip"
+                      checked={downloadMode === "zip"}
+                      onChange={() => setDownloadMode("zip")}
+                      className="accent-emerald-600"
+                    />
+                    Download ZIP
+                  </label>
+                  <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                    <input
+                      type="radio"
+                      name="download-mode"
+                      value="separate"
+                      checked={downloadMode === "separate"}
+                      onChange={() => setDownloadMode("separate")}
+                      className="accent-emerald-600"
+                    />
+                    Download separately
+                  </label>
+                </div>
+              </fieldset>
+            ) : null}
 
             <button
               type="button"

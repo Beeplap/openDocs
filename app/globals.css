@@ -12,7 +12,35 @@
   --brand: #059669;
   --brand-strong: #047857;
   --accent: #2563eb;
+  --accent-soft: #eff6ff;
+  --header-bg: rgba(255, 255, 255, 0.95);
+  --tooltip-bg: #0f172a;
+  --tooltip-text: #ffffff;
+  --page-gradient-start: #ffffff;
+  --page-gradient-end: #f5f7fa;
+  --hover: #f1f5f9;
   --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #050505;
+  --foreground: #f8fafc;
+  --surface: #101010;
+  --surface-strong: #000000;
+  --muted: #a1a1aa;
+  --line: #2a2a2a;
+  --brand: #f8fafc;
+  --brand-strong: #e5e7eb;
+  --accent: #38bdf8;
+  --accent-soft: #0b1f2a;
+  --header-bg: rgba(0, 0, 0, 0.92);
+  --tooltip-bg: #ffffff;
+  --tooltip-text: #050505;
+  --page-gradient-start: #000000;
+  --page-gradient-end: #050505;
+  --hover: #191919;
+  --shadow: 0 14px 40px rgba(0, 0, 0, 0.42);
 }
 
 @theme inline {
@@ -33,7 +61,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), sans-serif;
-  background-image: linear-gradient(180deg, #ffffff 0%, #f5f7fa 220px);
+  background-image: linear-gradient(180deg, var(--page-gradient-start) 0%, var(--page-gradient-end) 220px);
 }
 
 button,
@@ -86,4 +114,88 @@ textarea {
 .tool-link:hover .tool-tooltip,
 .tool-link:focus-visible .tool-tooltip {
   display: block;
+}
+
+.app-shell {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.site-header {
+  background: var(--header-bg);
+  border-color: var(--line);
+  color: var(--foreground);
+}
+
+.site-brand {
+  color: var(--foreground);
+}
+
+.site-nav-item,
+.drawer-link,
+.secondary-action {
+  color: var(--foreground);
+}
+
+.site-nav-item:hover,
+.site-nav-item:focus-visible,
+.drawer-link:hover,
+.drawer-link:focus-visible,
+.secondary-action:hover,
+.secondary-action:focus-visible {
+  background: var(--hover);
+  color: var(--foreground);
+}
+
+.site-nav-item[data-active="true"],
+.drawer-link[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mega-drawer {
+  background: var(--surface-strong);
+  border-color: var(--line);
+}
+
+.drawer-heading,
+.page-intro p {
+  color: var(--muted);
+}
+
+.tool-tooltip {
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+}
+
+.page-intro {
+  background: var(--surface-strong);
+  border-color: var(--line);
+}
+
+.secondary-action,
+.theme-toggle {
+  border-color: var(--line);
+}
+
+.theme-toggle {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--foreground);
+  color: var(--background);
+  min-width: 4.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  background: var(--accent);
+  color: var(--surface-strong);
 }

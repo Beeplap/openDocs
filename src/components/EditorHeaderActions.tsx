@@ -11,7 +11,7 @@ export default function EditorHeaderActions({ enabled }: Props) {
     <button
       type="button"
       onClick={() => window.dispatchEvent(new Event("opendocs:new-pdf"))}
-      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+      className="secondary-action inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition"
     >
       <ReloadIcon className="h-4 w-4" />
       New PDF
