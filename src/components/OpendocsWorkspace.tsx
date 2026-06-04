@@ -9,7 +9,7 @@ import ScanGrid from "./scanner/ScanGrid";
 import { A4_RATIO, defaultPageEdit } from "./scanner/types";
 import type { CropPoint, EditorBox, EditorFrame, ImageSize, MergeMode, PageEdit, PageFilter, PdfMergeItem, ScanItem, TransformHandle } from "./scanner/types";
 
-type WorkspaceMode = "scan" | "pdf" | "convert" | "advanced";
+type WorkspaceMode = "scan" | "pdf" | "convert" | "compress" | "advanced";
 export type WorkspaceIntent =
   | "add-text"
   | "add-signature"
@@ -1034,7 +1034,7 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
           ) : workspaceMode === "advanced" ? (
             <AdvancedPdfEditor onStatusMessage={setStatusMessage} initialIntent={editorIntent} />
           ) : (
-            <ImageConverter />
+            <ImageConverter purpose={workspaceMode === "compress" ? "compress" : "convert"} />
           )}
         </main>
       </div>

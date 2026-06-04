@@ -1,7 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 
-export type OutputFormat = "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
+export type OutputFormat = "application/pdf" | "image/jpeg" | "image/png" | "image/webp" | "image/svg+xml";
 
 export type ConvertFileParams = {
   file: File;
@@ -50,7 +50,12 @@ function isHeicLike(file: File) {
   return type.includes("heic") || type.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
 }
 
+function isSvgFile(file: File) {
+  return file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+}
+
 function supportedImageType(type: string): Exclude<OutputFormat, "application/pdf"> {
+  if (type === "image/svg+xml") return "image/svg+xml";
   if (type === "image/png") return "image/png";
   if (type === "image/webp") return "image/webp";
   return "image/jpeg";
@@ -85,6 +90,43 @@ function loadImage(url: string) {
   });
 }
 
+function readBlobAsDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function escapeXmlAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function svgBlobFromDataUrl(dataUrl: string, width: number, height: number) {
+  const safeWidth = Math.max(1, Math.round(width));
+  const safeHeight = Math.max(1, Math.round(height));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeWidth}" height="${safeHeight}" viewBox="0 0 ${safeWidth} ${safeHeight}"><image href="${escapeXmlAttribute(dataUrl)}" width="${safeWidth}" height="${safeHeight}" preserveAspectRatio="xMidYMid meet"/></svg>`;
+  return new Blob([svg], { type: "image/svg+xml" });
+}
+
+function minifySvgMarkup(markup: string) {
+  return markup
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/>\s+</g, "><")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+async function svgFileToSvg(file: File) {
+  const source = await file.text();
+  return new Blob([minifySvgMarkup(source)], { type: "image/svg+xml" });
+}
+
 function canvasToBlob(canvas: HTMLCanvasElement, outputFormat: OutputFormat, quality: number) {
   return new Promise<Blob>((resolve, reject) => {
     const encodeQuality = outputFormat === "image/png" || outputFormat === "application/pdf" ? undefined : quality;
@@ -100,6 +142,29 @@ function canvasToBlob(canvas: HTMLCanvasElement, outputFormat: OutputFormat, qua
       encodeQuality
     );
   });
+}
+
+async function blobToSvg(blob: Blob) {
+  const objectUrl = URL.createObjectURL(blob);
+
+  try {
+    const image = await loadImage(objectUrl);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const dataUrl = await readBlobAsDataUrl(blob);
+    return svgBlobFromDataUrl(dataUrl, width, height);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function imageFileToSvg(file: File) {
+  if (isSvgFile(file)) {
+    return svgFileToSvg(file);
+  }
+
+  const normalized = await normalizeImageFile(file);
+  return blobToSvg(normalized.blob);
 }
 
 async function imageFileToCanvas(file: File) {
@@ -127,6 +192,11 @@ async function imageFileToCanvas(file: File) {
 }
 
 async function imageFileToImage(file: File, outputFormat: Exclude<OutputFormat, "application/pdf">, quality: number) {
+  if (outputFormat === "image/svg+xml") {
+    const blob = await imageFileToSvg(file);
+    return { blob, outputFormat };
+  }
+
   const { canvas } = await imageFileToCanvas(file);
   try {
     const blob = await canvasToBlob(canvas, outputFormat, quality);
@@ -226,6 +296,22 @@ export async function convertFile({ file, outputFormat, quality }: ConvertFilePa
   const boundedQuality = Math.max(0.1, Math.min(1, quality));
 
   if (isPdfFile(file)) {
+    if (outputFormat === "image/svg+xml") {
+      const pages = await rasterizePdf(file, boundedQuality, "image/png");
+      const outputs = await Promise.all(
+        pages.map(async (page) => ({
+          blob: await blobToSvg(page.blob),
+          outputFormat,
+          pageIndex: page.pageIndex,
+        }))
+      );
+      return {
+        outputs,
+        outputFormat,
+        warning: "PDF pages are rasterized and embedded inside SVG files, not rebuilt as editable vector artwork.",
+      };
+    }
+
     if (outputFormat === "application/pdf") {
       const blob = await pdfFileToPdf(file, boundedQuality);
       const warning =
@@ -252,7 +338,11 @@ export async function convertFile({ file, outputFormat, quality }: ConvertFilePa
   }
 
   const output = await imageFileToImage(file, outputFormat, boundedQuality);
-  return { outputs: [output], outputFormat };
+  const warning =
+    outputFormat === "image/svg+xml" && !isSvgFile(file)
+      ? "Raster images are embedded inside the SVG, not traced into editable vector paths."
+      : undefined;
+  return { outputs: [output], outputFormat, warning };
 }
 
 export async function convertImage({ file, outputFormat, quality }: ConvertImageParams): Promise<ConvertImageResult> {

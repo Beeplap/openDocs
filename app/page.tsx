@@ -10,7 +10,7 @@ export const metadata: Metadata = routeMetadata(route);
 
 const popularToolPaths = [
   "/merge-pdfs",
-  "/convert/compress-pdf",
+  "/compress",
   "/pdf-editor",
   "/pdf-editor/add-text",
   "/merge-images-pdf",
@@ -27,10 +27,12 @@ const sectionTone = {
   scan: "bg-blue-600",
   pdf: "bg-violet-600",
   convert: "bg-emerald-600",
+  compress: "bg-amber-600",
   advanced: "bg-cyan-600",
 };
 
 const toolLabelOverrides: Record<string, string> = {
+  "/compress": "Compress",
   "/convert/compress-pdf": "Compress",
   "/convert/pdf-to-jpg": "PDF to JPG",
   "/convert/pdf-to-png": "PDF to PNG",

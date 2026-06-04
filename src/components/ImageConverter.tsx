@@ -11,9 +11,11 @@ const outputOptions: { label: string; value: OutputFormat }[] = [
   { label: "JPG", value: "image/jpeg" },
   { label: "PNG", value: "image/png" },
   { label: "WEBP", value: "image/webp" },
+  { label: "SVG", value: "image/svg+xml" },
 ];
 
 type DownloadMode = "zip" | "separate";
+type ConverterPurpose = "convert" | "compress";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -24,6 +26,7 @@ function extensionFromMime(type: OutputFormat) {
   if (type === "application/pdf") return "pdf";
   if (type === "image/png") return "png";
   if (type === "image/webp") return "webp";
+  if (type === "image/svg+xml") return "svg";
   return "jpg";
 }
 
@@ -31,6 +34,7 @@ function mimeLabel(type: string) {
   if (type === "application/pdf") return "PDF";
   if (type.includes("png")) return "PNG";
   if (type.includes("webp")) return "WEBP";
+  if (type.includes("svg")) return "SVG";
   if (type.includes("jpeg") || type.includes("jpg")) return "JPG";
   if (type.includes("heic")) return "HEIC";
   if (type.includes("heif")) return "HEIF";
@@ -41,6 +45,7 @@ function detectInputFormat(file: File): OutputFormat | null {
   const name = file.name.toLowerCase();
   const type = file.type.toLowerCase();
   if (type === "application/pdf" || name.endsWith(".pdf")) return "application/pdf";
+  if (type === "image/svg+xml" || name.endsWith(".svg")) return "image/svg+xml";
   if (type === "image/png" || name.endsWith(".png")) return "image/png";
   if (type === "image/webp" || name.endsWith(".webp")) return "image/webp";
   if (type === "image/jpeg" || type === "image/jpg" || name.endsWith(".jpg") || name.endsWith(".jpeg")) {
@@ -49,8 +54,14 @@ function detectInputFormat(file: File): OutputFormat | null {
   return null;
 }
 
-function defaultOutputFormat(file: File): OutputFormat {
-  return detectInputFormat(file) ?? "image/jpeg";
+function defaultOutputFormat(file: File, purpose: ConverterPurpose): OutputFormat {
+  const inputFormat = detectInputFormat(file);
+  if (purpose === "compress") return inputFormat ?? "image/jpeg";
+  if (inputFormat === "application/pdf") return "image/jpeg";
+  if (inputFormat === "image/svg+xml") return "image/png";
+  if (inputFormat === "image/jpeg" || inputFormat === "image/png") return "application/pdf";
+  if (inputFormat === "image/webp") return "image/jpeg";
+  return "image/jpeg";
 }
 
 function estimateOutputSize(file: File, outputFormat: OutputFormat, quality: number, pageCount: number | null) {
@@ -60,6 +71,7 @@ function estimateOutputSize(file: File, outputFormat: OutputFormat, quality: num
 
   if (isSameFormat) {
     if (outputFormat === "image/png") return Math.max(1024, Math.round(inputSize * 0.96));
+    if (outputFormat === "image/svg+xml") return Math.max(512, Math.round(inputSize * 0.9));
     if (outputFormat === "application/pdf") return Math.max(1024, Math.round(inputSize * (0.28 + quality * 0.72)));
     return Math.max(1024, Math.round(inputSize * (0.16 + quality * 0.78)));
   }
@@ -67,7 +79,7 @@ function estimateOutputSize(file: File, outputFormat: OutputFormat, quality: num
   if (inputFormat === "application/pdf" && outputFormat !== "application/pdf") {
     const pages = Math.max(1, pageCount ?? 1);
     const perPageBaseline = Math.max(120 * 1024, Math.min(1.5 * 1024 * 1024, inputSize / pages));
-    const formatFactor = outputFormat === "image/png" ? 1.35 : outputFormat === "image/webp" ? 0.58 : 0.72;
+    const formatFactor = outputFormat === "image/png" ? 1.35 : outputFormat === "image/webp" ? 0.58 : outputFormat === "image/svg+xml" ? 1.55 : 0.72;
     return Math.round(perPageBaseline * pages * formatFactor * (0.35 + quality * 0.75));
   }
 
@@ -75,6 +87,7 @@ function estimateOutputSize(file: File, outputFormat: OutputFormat, quality: num
     return Math.max(1024, Math.round(inputSize * (0.55 + quality * 0.65)));
   }
 
+  if (outputFormat === "image/svg+xml") return Math.max(1024, Math.round(inputSize * 1.18));
   if (outputFormat === "image/png") return Math.max(1024, Math.round(inputSize * 1.25));
   if (outputFormat === "image/webp") return Math.max(1024, Math.round(inputSize * (0.28 + quality * 0.62)));
   return Math.max(1024, Math.round(inputSize * (0.32 + quality * 0.72)));
@@ -188,7 +201,7 @@ async function createZipBlob(entries: { blob: Blob; fileName: string }[]) {
   return new Blob(zipParts, { type: "application/zip" });
 }
 
-export default function ImageConverter() {
+export default function ImageConverter({ purpose = "convert" }: { purpose?: ConverterPurpose }) {
   const [file, setFile] = React.useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [outputFormat, setOutputFormat] = React.useState<OutputFormat>("image/jpeg");
@@ -202,9 +215,18 @@ export default function ImageConverter() {
   const previewRunRef = React.useRef(0);
 
   const inputFormat = file ? detectInputFormat(file) : null;
-  const isCompression = !!file && inputFormat === outputFormat;
+  const isCompression = purpose === "compress" || (!!file && inputFormat === outputFormat);
   const expectsMultipleOutputs =
     inputFormat === "application/pdf" && outputFormat !== "application/pdf" && (pdfPageCount ?? 0) > 1;
+  const availableOutputOptions = React.useMemo(() => {
+    if (purpose === "compress" && inputFormat) {
+      return outputOptions.filter((option) => option.value === inputFormat);
+    }
+    if (purpose === "convert" && inputFormat) {
+      return outputOptions.filter((option) => option.value !== inputFormat);
+    }
+    return outputOptions;
+  }, [inputFormat, purpose]);
   const estimatedOutputSize = React.useMemo(() => {
     if (!file) return null;
     return estimateOutputSize(file, outputFormat, quality, pdfPageCount);
@@ -228,7 +250,7 @@ export default function ImageConverter() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     const runId = previewRunRef.current + 1;
     previewRunRef.current = runId;
-    const nextOutputFormat = defaultOutputFormat(nextFile);
+    const nextOutputFormat = defaultOutputFormat(nextFile, purpose);
 
     setFile(nextFile);
     setPreviewUrl(null);
@@ -238,7 +260,7 @@ export default function ImageConverter() {
     setOutputFormat(nextOutputFormat);
     setQuality(detectInputFormat(nextFile) === nextOutputFormat ? 0.7 : 1);
     setDownloadMode("zip");
-    setStatus("Choose an output format and quality.");
+    setStatus(purpose === "compress" ? "Adjust the quality and compress the file." : "Choose an output format and quality.");
 
     if (detectInputFormat(nextFile) === "application/pdf") {
       void Promise.all([getPdfFirstPagePreview(nextFile), getPdfPageCount(nextFile)])
@@ -309,11 +331,11 @@ export default function ImageConverter() {
   return (
     <section className="panel p-5">
       <div className="border-b border-slate-200 pb-4">
-        <h2 className="text-xl font-semibold text-slate-950">Convert files</h2>
+        <h2 className="text-xl font-semibold text-slate-950">{purpose === "compress" ? "Compress files" : "Convert files"}</h2>
       </div>
 
       <div className="mt-4 space-y-4">
-        <Upload onFileSelected={onFileSelected} acceptedTypes="image/*,application/pdf,.heic,.heif" disabled={isConverting} />
+        <Upload onFileSelected={onFileSelected} acceptedTypes="image/*,application/pdf,.heic,.heif,.svg" disabled={isConverting} />
 
         {file ? (
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -344,17 +366,23 @@ export default function ImageConverter() {
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <label className="block">
               <span className="text-sm font-semibold text-slate-800">Output format</span>
-              <select
-                value={outputFormat}
-                onChange={(e) => applyOutputFormat(e.target.value as OutputFormat)}
-                className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none ring-emerald-200 focus:ring"
-              >
-                {outputOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              {purpose === "compress" ? (
+                <span className="mt-2 block rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  {mimeLabel(outputFormat)}
+                </span>
+              ) : (
+                <select
+                  value={outputFormat}
+                  onChange={(e) => applyOutputFormat(e.target.value as OutputFormat)}
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none ring-emerald-200 focus:ring"
+                >
+                  {availableOutputOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </label>
 
             <label className="mt-4 block">

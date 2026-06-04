@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import type { WorkspaceIntent } from "../components/OpendocsWorkspace";
 
-export type WorkspaceMode = "scan" | "pdf" | "convert" | "advanced";
-export type ToolSectionId = "scan" | "organize" | "convert" | "edit" | "secure";
+export type WorkspaceMode = "scan" | "pdf" | "convert" | "compress" | "advanced";
+export type ToolSectionId = "scan" | "organize" | "convert" | "compress" | "edit" | "secure";
 
 export type ToolRoute = {
   path: string;
@@ -39,7 +39,7 @@ export const toolRoutes: ToolRoute[] = [
     mode: "scan",
     priority: 1,
     changeFrequency: "weekly",
-    related: ["/merge-images-pdf", "/merge-pdfs", "/convert", "/pdf-editor"],
+    related: ["/merge-images-pdf", "/merge-pdfs", "/convert", "/compress", "/pdf-editor"],
   },
   {
     path: "/merge-images-pdf",
@@ -75,7 +75,7 @@ export const toolRoutes: ToolRoute[] = [
     mode: "scan",
     priority: 0.72,
     changeFrequency: "monthly",
-    related: ["/merge-images-pdf", "/merge-pdfs", "/convert"],
+    related: ["/merge-images-pdf", "/merge-pdfs", "/convert", "/compress"],
   },
   {
     path: "/merge-pdfs",
@@ -107,11 +107,20 @@ export const toolRoutes: ToolRoute[] = [
   {
     path: "/convert",
     title: "Convert documents and images",
-    description: "Convert images and PDF files to PDF, JPG, PNG, or WEBP.",
+    description: "Convert images, SVG files, and PDF files to PDF, JPG, PNG, WEBP, or SVG.",
     mode: "convert",
     priority: 0.9,
     changeFrequency: "weekly",
-    related: ["/convert/pdf-to-jpg", "/convert/jpg-to-pdf", "/convert/heic-to-jpg", "/convert/compress-pdf"],
+    related: ["/convert/pdf-to-jpg", "/convert/jpg-to-pdf", "/convert/png-to-svg", "/convert/svg-to-png", "/compress"],
+  },
+  {
+    path: "/compress",
+    title: "Compress PDF and images",
+    description: "Reduce PDF, JPG, PNG, WEBP, and SVG file sizes with adjustable quality settings.",
+    mode: "compress",
+    priority: 0.88,
+    changeFrequency: "weekly",
+    related: ["/convert", "/convert/compress-pdf", "/merge-pdfs", "/merge-images-pdf"],
   },
   {
     path: "/convert/pdf-to-jpg",
@@ -159,13 +168,58 @@ export const toolRoutes: ToolRoute[] = [
     related: ["/convert", "/convert/jpg-to-pdf", "/merge-images-pdf"],
   },
   {
-    path: "/convert/compress-pdf",
-    title: "Compress PDF",
-    description: "Reduce PDF size with adjustable quality settings.",
+    path: "/convert/png-to-svg",
+    title: "Convert PNG to SVG",
+    description: "Convert PNG images to downloadable SVG files in your browser.",
+    mode: "convert",
+    priority: 0.72,
+    changeFrequency: "monthly",
+    related: ["/convert", "/convert/image-to-svg", "/convert/svg-to-png", "/convert/png-to-pdf"],
+  },
+  {
+    path: "/convert/image-to-svg",
+    title: "Convert image to SVG",
+    description: "Convert uploaded image files to SVG files without sending them to a server.",
+    mode: "convert",
+    priority: 0.72,
+    changeFrequency: "monthly",
+    related: ["/convert", "/convert/png-to-svg", "/convert/svg-to-jpg", "/convert/svg-to-pdf"],
+  },
+  {
+    path: "/convert/svg-to-png",
+    title: "Convert SVG to PNG",
+    description: "Convert SVG files into PNG images.",
+    mode: "convert",
+    priority: 0.72,
+    changeFrequency: "monthly",
+    related: ["/convert", "/convert/svg-to-jpg", "/convert/svg-to-pdf", "/convert/png-to-svg"],
+  },
+  {
+    path: "/convert/svg-to-jpg",
+    title: "Convert SVG to JPG",
+    description: "Convert SVG files into JPG images.",
     mode: "convert",
     priority: 0.7,
     changeFrequency: "monthly",
-    related: ["/convert", "/merge-pdfs", "/merge-images-pdf"],
+    related: ["/convert", "/convert/svg-to-png", "/convert/svg-to-pdf", "/convert/image-to-svg"],
+  },
+  {
+    path: "/convert/svg-to-pdf",
+    title: "Convert SVG to PDF",
+    description: "Convert SVG graphics into PDF files.",
+    mode: "convert",
+    priority: 0.7,
+    changeFrequency: "monthly",
+    related: ["/convert", "/convert/svg-to-png", "/convert/svg-to-jpg", "/convert/image-to-svg"],
+  },
+  {
+    path: "/convert/compress-pdf",
+    title: "Compress PDF",
+    description: "Reduce PDF size with adjustable quality settings.",
+    mode: "compress",
+    priority: 0.7,
+    changeFrequency: "monthly",
+    related: ["/compress", "/convert", "/merge-pdfs", "/merge-images-pdf"],
   },
   {
     path: "/pdf-editor",
@@ -285,7 +339,13 @@ export const toolNavGroups: ToolNavGroup[] = [
     id: "convert",
     label: "Convert",
     description: "Convert images and PDFs between common formats.",
-    items: ["/convert", "/convert/compress-pdf", "/convert/pdf-to-jpg", "/convert/pdf-to-png", "/convert/jpg-to-pdf", "/convert/png-to-pdf", "/convert/heic-to-jpg"],
+    items: ["/convert", "/convert/pdf-to-jpg", "/convert/pdf-to-png", "/convert/jpg-to-pdf", "/convert/png-to-pdf", "/convert/heic-to-jpg", "/convert/png-to-svg", "/convert/image-to-svg", "/convert/svg-to-png", "/convert/svg-to-jpg", "/convert/svg-to-pdf"],
+  },
+  {
+    id: "compress",
+    label: "Compress",
+    description: "Reduce file size for PDFs and images.",
+    items: ["/compress", "/convert/compress-pdf"],
   },
   {
     id: "edit",

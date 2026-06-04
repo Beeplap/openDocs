@@ -12,12 +12,14 @@ const sectionTone = {
   scan: "bg-blue-600",
   organize: "bg-violet-600",
   convert: "bg-emerald-600",
+  compress: "bg-amber-600",
   edit: "bg-cyan-600",
   secure: "bg-rose-600",
 };
 
 const primaryNav = [
-  { label: "Convert & Compress", href: "/convert", activePrefix: "/convert", drawer: "convert" },
+  { label: "Convert", href: "/convert", activePrefix: "/convert", drawer: "convert" },
+  { label: "Compress", href: "/compress", activePrefix: "/compress", drawer: "compress" },
   { label: "Merge", href: "/merge-pdfs", drawer: "organize" },
   { label: "Edit", href: "/pdf-editor", drawer: "edit" },
   { label: "Sign", href: "/pdf-editor/add-signature", drawer: "sign" },
