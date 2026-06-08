@@ -3,6 +3,7 @@
 const DB_NAME = "opendocs-pending-files";
 const STORE_NAME = "pending";
 const DB_VERSION = 1;
+const PENDING_FILE_TTL_MS = 1000 * 60 * 30;
 
 export type PendingFileTarget = "pdf-editor";
 
@@ -39,6 +40,7 @@ export async function savePendingFiles(target: PendingFileTarget, fileList: File
   const db = await openPendingFilesDb();
   try {
     const transaction = db.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).delete(target);
     transaction.objectStore(STORE_NAME).put({ target, files, createdAt: Date.now() } satisfies PendingRecord);
     await transactionDone(transaction);
   } finally {
@@ -60,6 +62,10 @@ export async function takePendingFiles(target: PendingFileTarget) {
     const writeTransaction = db.transaction(STORE_NAME, "readwrite");
     writeTransaction.objectStore(STORE_NAME).delete(target);
     await transactionDone(writeTransaction);
+
+    if (record && Date.now() - record.createdAt > PENDING_FILE_TTL_MS) {
+      return [];
+    }
 
     return record?.files ?? [];
   } finally {

@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Poppins:wght@400;600;700&family=Roboto:wght@400;700&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -137,6 +136,10 @@ textarea {
   color: var(--foreground);
 }
 
+.site-nav-item {
+  min-height: 2.75rem;
+}
+
 .site-nav-item:hover,
 .site-nav-item:focus-visible,
 .drawer-link:hover,
@@ -216,7 +219,7 @@ textarea {
 
 .theme-switch {
   --switch-width: 4.625rem;
-  --switch-height: 2.375rem;
+  --switch-height: 2.75rem;
   --switch-padding: 0.25rem;
   --switch-thumb: calc(var(--switch-height) - (var(--switch-padding) * 2));
   position: relative;

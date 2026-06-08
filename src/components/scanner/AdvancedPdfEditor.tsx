@@ -30,7 +30,7 @@ type PageData = { dataUrl: string; width: number; height: number; rotation: numb
 type HistoryEntry = { annotations: AdvancedAnnotation[]; pages: PageData[]; };
 type EditableAnnotation = Exclude<AdvancedAnnotation, { kind: "watermark" }>;
 type AnnotationContextMenu = { x: number; y: number; annotationId: string | null };
-type PdfPickerAction = "edit" | "unlock" | "flatten";
+type PdfPickerAction = "edit" | "unlock" | "flatten" | "protect";
 type ExportOptions = { forceFlatten?: boolean; forceProtect?: boolean };
 type ExportPdfFn = (filename?: string, success?: string, options?: ExportOptions) => Promise<void>;
 
@@ -155,6 +155,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const [unlockError, setUnlockError] = useState("");
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [protectPassword, setProtectPassword] = useState("");
+  const [protectPasswordConfirm, setProtectPasswordConfirm] = useState("");
   const [showProtectPassword, setShowProtectPassword] = useState(false);
   const [showProtectDialog, setShowProtectDialog] = useState(false);
   const [protectOnDownload, setProtectOnDownload] = useState(false);
@@ -172,6 +173,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const fileActionRef = useRef<PdfPickerAction>("edit");
   const autoExportAfterLoadRef = useRef<Exclude<PdfPickerAction, "edit"> | null>(null);
   const exportPdfRef = useRef<ExportPdfFn | null>(null);
+
+  const trimmedProtectPassword = protectPassword.trim();
+  const trimmedProtectPasswordConfirm = protectPasswordConfirm.trim();
+  const protectPasswordValid =
+    trimmedProtectPassword.length >= 6 && trimmedProtectPassword === trimmedProtectPasswordConfirm;
   const eraserSessionRef = useRef<{ deletedIds: Set<string>; baseAnnotations: AdvancedAnnotation[] } | null>(null);
   const pageSortSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -446,7 +452,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
       autoExportAfterLoadRef.current = action;
       if (action === "flatten") setFlattenOnDownload(true);
     }
-    void loadPdf(f, undefined, { append: action === "edit" && mode === "append" });
+    void loadPdf(f, undefined, { append: action === "edit" && mode === "append" }).then((loaded) => {
+      if (action === "protect" && loaded) setShowProtectDialog(true);
+    });
     e.target.value = "";
   }
 
@@ -1037,6 +1045,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     if (pages.length === 0) return;
     const shouldProtect = options.forceProtect ?? protectOnDownload;
     const shouldFlatten = options.forceFlatten ?? flattenOnDownload;
+    if (shouldProtect && !protectPasswordValid) {
+      onStatusMessage("Enter matching passwords with at least 6 characters before protecting the PDF.");
+      return;
+    }
     setIsExporting(true);
     onStatusMessage(shouldProtect ? "Protecting PDF..." : "Exporting PDF...");
     try {
@@ -1073,7 +1085,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   }
 
   function protectPdf() {
-    if (!protectPassword.trim()) return;
+    if (!protectPasswordValid) {
+      onStatusMessage("Enter matching passwords with at least 6 characters.");
+      return;
+    }
     if (pages.length === 0) {
       onStatusMessage("Upload a PDF before protecting it.");
       return;
@@ -1462,7 +1477,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
               Protect your PDF with 128-bit AES encryption.
             </p>
             <label className="mb-4 block text-sm font-semibold text-slate-700">
-              Confirm password
+              Password
               <span className="mt-2 flex overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-blue-300">
                 <input
                   type={showProtectPassword ? "text" : "password"}
@@ -1471,11 +1486,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                     setProtectPassword(e.target.value);
                     if (protectOnDownload) setProtectOnDownload(false);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter" || !protectPassword.trim() || isExporting) return;
-                    e.preventDefault();
-                    protectPdf();
-                  }}
+                  minLength={6}
                   className="min-w-0 flex-1 px-4 py-2.5 text-sm outline-none"
                   autoFocus
                 />
@@ -1488,12 +1499,34 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                 </button>
               </span>
             </label>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Confirm password
+              <input
+                type={showProtectPassword ? "text" : "password"}
+                value={protectPasswordConfirm}
+                onChange={(e) => {
+                  setProtectPasswordConfirm(e.target.value);
+                  if (protectOnDownload) setProtectOnDownload(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || !protectPasswordValid || isExporting) return;
+                  e.preventDefault();
+                  protectPdf();
+                }}
+                minLength={6}
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-300"
+              />
+            </label>
+            <p className={`mb-4 text-sm ${protectPasswordValid ? "text-emerald-700" : "text-slate-500"}`}>
+              Use at least 6 characters. Both fields must match before download.
+            </p>
             <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {
                   setShowProtectDialog(false);
                   setShowProtectPassword(false);
+                  setProtectPasswordConfirm("");
                 }}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
@@ -1502,7 +1535,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
               <button
                 type="button"
                 onClick={() => void protectPdf()}
-                disabled={!protectPassword.trim() || isExporting}
+                disabled={!protectPasswordValid || isExporting}
                 className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-40"
               >
                 Apply
@@ -1556,19 +1589,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
                   <>
                     <button
                       type="button"
-                      onClick={() => openSecurePdfPicker("unlock")}
-                      disabled={isLoading || isExporting}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Unlock PDF
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openSecurePdfPicker("flatten")}
+                      onClick={() => openSecurePdfPicker("protect")}
                       disabled={isLoading || isExporting}
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Flatten PDF
+                      Choose PDF to protect
                     </button>
                   </>
                 ) : null}

@@ -23,6 +23,8 @@ export default function ExportPanel({
   previewOrderedItems,
   mergePreviewUrls,
   isGeneratingPreview,
+  isProcessing,
+  statusMessage,
   exportPdf,
   openPdfPageEditor,
 }: Props) {
@@ -70,11 +72,14 @@ export default function ExportPanel({
 
         <button
           onClick={() => void exportPdf()}
-          disabled={pdfOrderItems.length === 0}
+          disabled={pdfOrderItems.length === 0 || isProcessing}
           className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Merge Selected to PDF
+          {isProcessing ? "Building PDF..." : "Merge Selected to PDF"}
         </button>
+        <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600" aria-live="polite">
+          {statusMessage}
+        </p>
 
         <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
           <p className="text-sm font-semibold text-slate-800">Preview</p>
@@ -103,7 +108,7 @@ export default function ExportPanel({
                     <button
                       type="button"
                       onClick={() => openPdfPageEditor(pageIdx)}
-                      className="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-emerald-50 hover:text-emerald-700"
+                      className="absolute right-2 top-2 z-20 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-emerald-50 hover:text-emerald-700"
                       aria-label={`Edit PDF page ${pageNumber}`}
                       title="Edit A4 page"
                     >

@@ -200,6 +200,7 @@ export default function PdfMergePanel({
                         onClick={() => onMovePdf(item.id, -1)}
                         disabled={index === 0}
                         className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`Move ${item.name} up`}
                       >
                         Up
                       </button>
@@ -208,6 +209,7 @@ export default function PdfMergePanel({
                         onClick={() => onMovePdf(item.id, 1)}
                         disabled={index === pdfFiles.length - 1}
                         className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`Move ${item.name} down`}
                       >
                         Down
                       </button>

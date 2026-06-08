@@ -122,9 +122,39 @@ function minifySvgMarkup(markup: string) {
     .trim();
 }
 
+function sanitizeSvgMarkup(markup: string) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(markup, "image/svg+xml");
+  if (doc.querySelector("parsererror")) {
+    throw new Error("Invalid SVG");
+  }
+
+  const svg = doc.documentElement;
+  if (svg.nodeName.toLowerCase() !== "svg") {
+    throw new Error("Invalid SVG root");
+  }
+
+  doc.querySelectorAll("script,foreignObject,iframe,object,embed,link,meta").forEach((node) => node.remove());
+  doc.querySelectorAll("*").forEach((node) => {
+    for (const attr of Array.from(node.attributes)) {
+      const name = attr.name.toLowerCase();
+      const value = attr.value.trim().toLowerCase();
+      const isHref = name === "href" || name === "xlink:href";
+      const isUnsafeUrl = value.startsWith("javascript:") || value.startsWith("data:text/html");
+      const isExternalHref = isHref && /^(https?:)?\/\//.test(value);
+
+      if (name.startsWith("on") || isUnsafeUrl || isExternalHref) {
+        node.removeAttribute(attr.name);
+      }
+    }
+  });
+
+  return new XMLSerializer().serializeToString(svg);
+}
+
 async function svgFileToSvg(file: File) {
   const source = await file.text();
-  return new Blob([minifySvgMarkup(source)], { type: "image/svg+xml" });
+  return new Blob([minifySvgMarkup(sanitizeSvgMarkup(source))], { type: "image/svg+xml" });
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, outputFormat: OutputFormat, quality: number) {

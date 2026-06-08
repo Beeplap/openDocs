@@ -16,6 +16,8 @@ const outputOptions: { label: string; value: OutputFormat }[] = [
 
 type DownloadMode = "zip" | "separate";
 type ConverterPurpose = "convert" | "compress";
+const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
+const MAX_CONVERT_PDF_PAGES = 100;
 
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -91,6 +93,25 @@ function estimateOutputSize(file: File, outputFormat: OutputFormat, quality: num
   if (outputFormat === "image/png") return Math.max(1024, Math.round(inputSize * 1.25));
   if (outputFormat === "image/webp") return Math.max(1024, Math.round(inputSize * (0.28 + quality * 0.62)));
   return Math.max(1024, Math.round(inputSize * (0.32 + quality * 0.72)));
+}
+
+function qualityAffectsOutput(file: File, outputFormat: OutputFormat) {
+  const inputFormat = detectInputFormat(file);
+
+  if (outputFormat === "image/jpeg" || outputFormat === "image/webp" || outputFormat === "application/pdf") {
+    return true;
+  }
+
+  if (inputFormat === "application/pdf" && (outputFormat === "image/png" || outputFormat === "image/svg+xml")) {
+    return true;
+  }
+
+  return false;
+}
+
+function defaultQualityFor(file: File, outputFormat: OutputFormat) {
+  if (!qualityAffectsOutput(file, outputFormat)) return 1;
+  return detectInputFormat(file) === outputFormat ? 0.7 : 1;
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -218,6 +239,8 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
   const isCompression = purpose === "compress" || (!!file && inputFormat === outputFormat);
   const expectsMultipleOutputs =
     inputFormat === "application/pdf" && outputFormat !== "application/pdf" && (pdfPageCount ?? 0) > 1;
+  const fileTooLarge = !!file && file.size > MAX_UPLOAD_BYTES;
+  const pdfTooLong = inputFormat === "application/pdf" && pdfPageCount !== null && pdfPageCount > MAX_CONVERT_PDF_PAGES;
   const availableOutputOptions = React.useMemo(() => {
     if (purpose === "compress" && inputFormat) {
       return outputOptions.filter((option) => option.value === inputFormat);
@@ -231,6 +254,7 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
     if (!file) return null;
     return estimateOutputSize(file, outputFormat, quality, pdfPageCount);
   }, [file, outputFormat, pdfPageCount, quality]);
+  const canTuneQuality = file ? qualityAffectsOutput(file, outputFormat) : true;
 
   React.useEffect(() => {
     return () => {
@@ -240,7 +264,7 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
 
   function applyOutputFormat(nextFormat: OutputFormat, nextFile = file) {
     setOutputFormat(nextFormat);
-    setQuality(nextFile && detectInputFormat(nextFile) === nextFormat ? 0.7 : 1);
+    setQuality(nextFile ? defaultQualityFor(nextFile, nextFormat) : 1);
     setOutputSize(null);
     setWarning(null);
     setDownloadMode("zip");
@@ -258,9 +282,15 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
     setOutputSize(null);
     setWarning(null);
     setOutputFormat(nextOutputFormat);
-    setQuality(detectInputFormat(nextFile) === nextOutputFormat ? 0.7 : 1);
+    setQuality(defaultQualityFor(nextFile, nextOutputFormat));
     setDownloadMode("zip");
     setStatus(purpose === "compress" ? "Adjust the quality and compress the file." : "Choose an output format and quality.");
+
+    if (nextFile.size > MAX_UPLOAD_BYTES) {
+      setWarning(`Files are limited to ${formatBytes(MAX_UPLOAD_BYTES)} for browser processing.`);
+      setStatus("Choose a smaller file to continue.");
+      return;
+    }
 
     if (detectInputFormat(nextFile) === "application/pdf") {
       void Promise.all([getPdfFirstPagePreview(nextFile), getPdfPageCount(nextFile)])
@@ -268,6 +298,10 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
           if (previewRunRef.current !== runId) return;
           setPreviewUrl(URL.createObjectURL(previewBlob));
           setPdfPageCount(pageCount);
+          if (pageCount > MAX_CONVERT_PDF_PAGES) {
+            setWarning(`PDFs are limited to ${MAX_CONVERT_PDF_PAGES} pages for browser conversion.`);
+            setStatus("Choose a shorter PDF to continue.");
+          }
         })
         .catch(() => {
           if (previewRunRef.current !== runId) return;
@@ -282,6 +316,10 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
 
   async function handleConvert() {
     if (!file) return;
+    if (fileTooLarge || pdfTooLong) {
+      setStatus(fileTooLarge ? "Choose a smaller file to continue." : "Choose a shorter PDF to continue.");
+      return;
+    }
 
     setIsConverting(true);
     setWarning(null);
@@ -388,7 +426,7 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
             <label className="mt-4 block">
               <div className="mb-2 flex items-center justify-between text-sm">
                 <span className="font-semibold text-slate-800">Quality</span>
-                <span className="text-slate-500">{Math.round(quality * 100)}%</span>
+                <span className="text-slate-500">{canTuneQuality ? `${Math.round(quality * 100)}%` : "Not adjustable"}</span>
               </div>
               <input
                 type="range"
@@ -396,17 +434,23 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
                 max={1}
                 step={0.05}
                 value={quality}
+                disabled={!canTuneQuality}
                 onChange={(e) => {
                   setQuality(Number(e.target.value));
                   setOutputSize(null);
                   setWarning(null);
                 }}
-                className="w-full accent-emerald-600"
+                className="w-full accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-45"
               />
               <div className="mt-1 flex justify-between text-xs text-slate-500">
                 <span>Smaller</span>
                 <span>Best quality</span>
               </div>
+              {!canTuneQuality ? (
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  This output format is lossless here, so the estimated size will not change with quality.
+                </p>
+              ) : null}
             </label>
 
             {warning ? <p className="mt-3 text-sm font-medium text-amber-700">{warning}</p> : null}
@@ -444,7 +488,7 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
             <button
               type="button"
               onClick={() => void handleConvert()}
-              disabled={isConverting}
+              disabled={isConverting || fileTooLarge || pdfTooLong}
               className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-55"
             >
               {isConverting ? "Processing..." : isCompression ? "Compress & Download" : "Convert & Download"}

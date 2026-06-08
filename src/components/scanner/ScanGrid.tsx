@@ -232,6 +232,7 @@ export default function ScanGrid({
                       onClick={() => moveScanPage(item.id, -1)}
                       disabled={!selected || pdfIndex <= 0}
                       className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`Move ${item.name} up`}
                     >
                       Up
                     </button>
@@ -240,6 +241,7 @@ export default function ScanGrid({
                       onClick={() => moveScanPage(item.id, 1)}
                       disabled={!selected || pdfIndex === pdfOrderIds.length - 1}
                       className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`Move ${item.name} down`}
                     >
                       Down
                     </button>

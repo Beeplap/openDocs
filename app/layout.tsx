@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Plus_Jakarta_Sans } from "next/font/google";
 import Script from "next/script";
-import { getSiteUrl, siteDescription, siteName, siteTitle } from "../src/lib/siteRoutes";
+import { getSiteUrl, siteDescription, siteName, siteOgImage, siteTitle } from "../src/lib/siteRoutes";
 import "./globals.css";
 
 const themeInitScript = `
@@ -55,11 +55,13 @@ export const metadata: Metadata = {
     siteName,
     type: "website",
     url: getSiteUrl(),
+    images: [siteOgImage],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: siteTitle,
     description: siteDescription,
+    images: [siteOgImage.url],
   },
 };
 

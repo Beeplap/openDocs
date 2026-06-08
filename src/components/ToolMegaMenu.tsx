@@ -34,6 +34,7 @@ type DrawerStyle = CSSProperties & {
 };
 const ALL_DRAWER_WIDTH = 1360;
 const WIDE_COMPACT_DRAWER_WIDTH = 640;
+const DRAWER_ID = "tool-mega-menu-drawer";
 
 const signGroup: ToolNavGroup = {
   id: "edit",
@@ -171,6 +172,7 @@ export default function ToolMegaMenu() {
                 onFocus={(event) => startHoverOpen("all", event.currentTarget)}
                 onBlur={clearOpenTimer}
                 aria-expanded={drawerMode === "all"}
+                aria-controls={drawerMode ? DRAWER_ID : undefined}
                 data-active={drawerMode === "all"}
                 className="site-nav-item inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition"
               >
@@ -214,6 +216,7 @@ export default function ToolMegaMenu() {
 
         {drawerGroups.length > 0 ? (
           <div
+            id={DRAWER_ID}
             className={`mega-drawer absolute top-full z-50 max-h-[var(--mega-drawer-max-height)] overflow-y-auto rounded-b-lg border border-t-0 px-5 py-5 shadow-2xl ${
               drawerMode === "all" ? "w-[min(1360px,calc(100vw-2rem))]" : "w-[min(640px,calc(100vw-2rem))]"
             }`}

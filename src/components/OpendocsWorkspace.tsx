@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { getPdfFirstPagePreview, getPdfPageCount, imagesToFullPageA4PDF, mergePdfFiles, pdfToImages } from "../utils/pdfUtils";
-import { supabase, SUPABASE_SCANS_BUCKET, SUPABASE_SCAN_PAGES_TABLE } from "../lib/supabaseClient";
+import { isRemoteScanStorageEnabled, supabase, SUPABASE_SCANS_BUCKET, SUPABASE_SCAN_PAGES_TABLE } from "../lib/supabaseClient";
 import ExportPanel from "./scanner/ExportPanel";
 import ScanGrid from "./scanner/ScanGrid";
 import { A4_RATIO, defaultPageEdit } from "./scanner/types";
@@ -38,6 +38,13 @@ type Props = {
   editorIntent?: WorkspaceIntent;
 };
 
+const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
+const MAX_WORKSPACE_PDF_PAGES = 100;
+
+function formatLimitBytes(bytes: number) {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
+
 export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }: Props) {
   const [items, setItems] = useState<ScanItem[]>([]);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(initialMode);
@@ -49,8 +56,7 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [mergePreviewUrls, setMergePreviewUrls] = useState<string[]>([]);
   const SESSION_TTL_MS = 1000 * 60 * 30; // 30 minutes
-  const isSupabaseConfigured =
-    !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const isSupabaseConfigured = isRemoteScanStorageEnabled && supabase !== null;
   const [mergeMode, setMergeMode] = useState<MergeMode>("single");
   const [cropOpen, setCropOpen] = useState(false);
   const [cropQueue, setCropQueue] = useState<string[]>([]);
@@ -163,7 +169,7 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
   }, [pdfFiles]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured || !supabase) return;
     try {
       const existing = sessionStorage.getItem("opendocs_session_id");
       if (existing) {
@@ -220,7 +226,7 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
   const cleanupSessionBestEffort = useCallback(async () => {
     const userId = supabaseUserIdRef.current;
     const sessionId = sessionIdRef.current;
-    if (!isSupabaseConfigured || !supabaseReady || !userId || !sessionId) return;
+    if (!isSupabaseConfigured || !supabase || !supabaseReady || !userId || !sessionId) return;
 
     try {
       const { data: rows } = await supabase
@@ -388,7 +394,7 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
   }) {
     const userId = supabaseUserIdRef.current;
     const sessionId = sessionIdRef.current;
-    if (!isSupabaseConfigured || !supabaseReady || !userId || !sessionId) return null;
+    if (!isSupabaseConfigured || !supabase || !supabaseReady || !userId || !sessionId) return null;
 
     const ext = getExtFromBlobType(params.blob.type || "");
     const storagePath = `${userId}/${sessionId}/${params.itemId}.${ext}`;
@@ -428,7 +434,7 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
   async function deleteItemFromSupabase(item: ScanItem) {
     const userId = supabaseUserIdRef.current;
     const sessionId = sessionIdRef.current;
-    if (!isSupabaseConfigured || !supabaseReady || !userId || !sessionId) return;
+    if (!isSupabaseConfigured || !supabase || !supabaseReady || !userId || !sessionId) return;
     if (!item.storagePath) return;
 
     const storagePath = item.storagePath;
@@ -494,14 +500,25 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
   async function handlePickedFiles(fileList: FileList | null) {
     if (!fileList?.length) return;
 
+    const pickedFiles = Array.from(fileList);
+    const oversizedFile = pickedFiles.find((file) => file.size > MAX_UPLOAD_BYTES);
+    if (oversizedFile) {
+      setStatusMessage(`${oversizedFile.name} is larger than ${formatLimitBytes(MAX_UPLOAD_BYTES)}. Choose a smaller file.`);
+      return;
+    }
+
     setIsProcessing(true);
     setStatusMessage("Preparing your scans...");
 
     try {
       const nextBlobs: { blob: Blob; name: string; kind: ScanItem["kind"] }[] = [];
 
-      for (const file of Array.from(fileList)) {
+      for (const file of pickedFiles) {
         if (file.type === "application/pdf") {
+          const pageCount = await getPdfPageCount(file);
+          if (pageCount > MAX_WORKSPACE_PDF_PAGES) {
+            throw new Error("PDF_PAGE_LIMIT");
+          }
           const pdfPages = await pdfToImages(file);
           pdfPages.forEach((blob, index) => {
             nextBlobs.push({
@@ -522,8 +539,12 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
 
       await addBlobItems(nextBlobs);
       setStatusMessage(`${nextBlobs.length} item${nextBlobs.length > 1 ? "s" : ""} added to your workspace.`);
-    } catch {
-      setStatusMessage("Could not process one of the files. Try images or a standard PDF.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error && error.message === "PDF_PAGE_LIMIT"
+          ? `PDFs are limited to ${MAX_WORKSPACE_PDF_PAGES} pages for browser processing.`
+          : "Could not process one of the files. Try images or a standard PDF."
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -535,6 +556,11 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
     const files = Array.from(fileList).filter((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
     if (files.length === 0) {
       setStatusMessage("Choose PDF files to merge.");
+      return;
+    }
+    const oversizedFile = files.find((file) => file.size > MAX_UPLOAD_BYTES);
+    if (oversizedFile) {
+      setStatusMessage(`${oversizedFile.name} is larger than ${formatLimitBytes(MAX_UPLOAD_BYTES)}. Choose a smaller PDF.`);
       return;
     }
 
@@ -549,6 +575,9 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
             getPdfPageCount(file).catch(() => null),
             getPdfFirstPagePreview(file).catch(() => null),
           ]);
+          if (pageCount !== null && pageCount > MAX_WORKSPACE_PDF_PAGES) {
+            throw new Error("PDF_PAGE_LIMIT");
+          }
 
           return {
             id: generateId(),
@@ -565,8 +594,12 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
 
       setPdfFiles((current) => [...current, ...nextItems]);
       setStatusMessage(`${nextItems.length} PDF${nextItems.length === 1 ? "" : "s"} added to merge queue.`);
-    } catch {
-      setStatusMessage("Could not read one of the PDFs. Try a standard, unlocked PDF.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error && error.message === "PDF_PAGE_LIMIT"
+          ? `PDFs are limited to ${MAX_WORKSPACE_PDF_PAGES} pages for browser processing.`
+          : "Could not read one of the PDFs. Try a standard, unlocked PDF."
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -904,17 +937,24 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
       return;
     }
 
+    setIsProcessing(true);
     setStatusMessage("Building your PDF...");
-    const renderedPages = await renderEditedPdfPages(pdfOrderItems, mergeMode, 1800);
-    const pdfBytes = await imagesToFullPageA4PDF(renderedPages);
-    const pdfBlob = new Blob([Uint8Array.from(pdfBytes)], { type: "application/pdf" });
-    const url = URL.createObjectURL(pdfBlob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = mergeMode === "twoUp" ? "opendocs-2up.pdf" : "opendocs-export.pdf";
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setStatusMessage("PDF downloaded successfully.");
+    try {
+      const renderedPages = await renderEditedPdfPages(pdfOrderItems, mergeMode, 1800);
+      const pdfBytes = await imagesToFullPageA4PDF(renderedPages);
+      const pdfBlob = new Blob([Uint8Array.from(pdfBytes)], { type: "application/pdf" });
+      const url = URL.createObjectURL(pdfBlob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = mergeMode === "twoUp" ? "opendocs-2up.pdf" : "opendocs-export.pdf";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setStatusMessage("PDF downloaded successfully.");
+    } catch {
+      setStatusMessage("Could not build the PDF. Try fewer pages or smaller images.");
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
 
@@ -962,6 +1002,9 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
       />
 
       <div className="mx-auto max-w-7xl">
+        <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" role="status" aria-live="polite">
+          {statusMessage}
+        </div>
         <main className="space-y-5">
           {workspaceMode === "scan" ? (
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">

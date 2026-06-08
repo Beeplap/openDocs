@@ -26,6 +26,12 @@ export const siteName = "Opendocs";
 export const siteTitle = "Opendocs - Open-source and client side document manager";
 export const siteDescription =
   "Opendocs is an open-source, client-side document manager for scanning, merging, converting, and editing documents in your browser.";
+export const siteOgImage = {
+  url: "/opengraph-image",
+  width: 1200,
+  height: 630,
+  alt: "Opendocs document tools workspace",
+};
 
 export function getSiteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || "https://opendocs.app").replace(/\/$/, "");
@@ -377,11 +383,13 @@ export function routeMetadata(route: ToolRoute): Metadata {
       url,
       siteName,
       type: "website",
+      images: [siteOgImage],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title: `${route.title} | ${siteName}`,
       description: route.description,
+      images: [siteOgImage.url],
     },
   };
 }

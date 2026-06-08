@@ -1,11 +1,5 @@
-import type { Metadata } from "next";
-import ToolRoutePage from "../../src/components/ToolRoutePage";
-import { getRoute, routeMetadata } from "../../src/lib/siteRoutes";
-
-const route = getRoute("/merge-images-pdf")!;
-
-export const metadata: Metadata = routeMetadata(route);
+import { permanentRedirect } from "next/navigation";
 
 export default function ScanToPdfPage() {
-  return <ToolRoutePage route={route} />;
+  permanentRedirect("/merge-images-pdf");
 }

@@ -9,15 +9,32 @@ type ExpiredScanRow = {
   storage_path: string | null;
 };
 
-export async function GET() {
+function jsonResponse(body: Record<string, unknown>, status: number) {
+  return Response.json(body, {
+    status,
+    headers: {
+      "cache-control": "no-store",
+    },
+  });
+}
+
+export async function GET(request: Request) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authorization = request.headers.get("authorization");
+
+  if (!cronSecret) {
+    return jsonResponse({ ok: false, error: "Missing CRON_SECRET env" }, 500);
+  }
+
+  if (authorization !== `Bearer ${cronSecret}`) {
+    return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return new Response(JSON.stringify({ ok: false, error: "Missing Supabase env" }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
+    return jsonResponse({ ok: false, error: "Missing Supabase env" }, 500);
   }
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
@@ -35,10 +52,7 @@ export async function GET() {
     .limit(2000);
 
   if (selectError) {
-    return new Response(JSON.stringify({ ok: false, error: selectError.message }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
+    return jsonResponse({ ok: false, error: selectError.message }, 500);
   }
 
   const paths =
@@ -58,8 +72,5 @@ export async function GET() {
     // best-effort cleanup
   }
 
-  return new Response(JSON.stringify({ ok: true, deleted_paths: paths.length }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  return jsonResponse({ ok: true, deleted_paths: paths.length }, 200);
 }
