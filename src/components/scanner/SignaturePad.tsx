@@ -47,25 +47,25 @@ export default function SignaturePad({ open, onApply, onClose }: Props) {
     };
   }, [open, isMobileLandscape]);
 
-  // Clear canvas when opened
-  useEffect(() => {
-    if (!open) return;
-    clearCanvas();
-  }, [open]);
-
-  function getCtx() {
+  const getCtx = useCallback(() => {
     const canvas = canvasRef.current;
     return canvas ? canvas.getContext("2d") : null;
-  }
+  }, []);
 
-  function clearCanvas() {
+  const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = getCtx();
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setHasStrokes(false);
     lastPoint.current = null;
-  }
+  }, [getCtx]);
+
+  // Clear canvas when opened
+  useEffect(() => {
+    if (!open) return;
+    clearCanvas();
+  }, [clearCanvas, open]);
 
   function getPos(e: React.PointerEvent<HTMLCanvasElement>): Point {
     const canvas = canvasRef.current!;

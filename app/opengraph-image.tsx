@@ -43,7 +43,7 @@ export default function Image() {
           </div>
           <div style={{ fontSize: "44px", fontWeight: 800 }}>{siteName}</div>
         </div>
-        <div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ maxWidth: "920px", fontSize: "72px", lineHeight: 1.02, fontWeight: 900 }}>
             Private PDF and document tools in your browser
           </div>

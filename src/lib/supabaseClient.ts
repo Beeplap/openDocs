@@ -12,7 +12,7 @@ if (process.env.NEXT_PUBLIC_ENABLE_TEMP_SCAN_STORAGE === "true" && (!supabaseUrl
 }
 
 export const supabase = isRemoteScanStorageEnabled
-  ? createClient(supabaseUrl, supabaseAnonKey, {
+  ? createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
