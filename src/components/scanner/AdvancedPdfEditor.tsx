@@ -122,9 +122,13 @@ function drawWatermarkPattern(ctx: CanvasRenderingContext2D, text: string, width
   ctx.restore();
 }
 
-type Props = { onStatusMessage: (msg: string) => void; initialIntent?: WorkspaceIntent };
+type Props = {
+  onStatusMessage: (msg: string) => void;
+  statusMessage?: string;
+  initialIntent: "edit" | "protect" | "flatten" | "unlock";
+};
 
-export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Props) {
+export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, initialIntent }: Props) {
   const [pages, setPages] = useState<PageData[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [annotations, setAnnotations] = useState<AdvancedAnnotation[]>([]);
@@ -165,6 +169,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const [eraserPreview, setEraserPreview] = useState<{ pageIndex: number; x: number; y: number } | null>(null);
   const [panState, setPanState] = useState<{ pointerId: number; startY: number; scrollTop: number } | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [exportFilename, setExportFilename] = useState("document-edited.pdf");
   const pendingZoomScrollRef = useRef<{ scrollLeft: number; scrollTop: number } | null>(null);
   
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -396,7 +401,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
         width: c.width, height: c.height, rotation: 0,
         originalPageIndex: i,
       }));
-      const pageIds = pagesData.map((page) => page.id);
+      const originalIds = pagesData.map((page) => page.id);
       canvases.forEach((c) => c.remove());
 
       if (append && pages.length > 0) {
@@ -414,7 +419,12 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
         setHistory([{ annotations: [], pages: pagesData }]);
         setHistoryIndex(0);
         setCurrentPdfFile(f);
-        setOriginalPageIds(pageIds);
+        setOriginalPageIds(originalIds);
+        if (!append) {
+          setExportFilename(f.name.replace(/\.pdf$/i, "") + "-edited.pdf");
+        }
+
+        onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`);
         setPages(pagesData);
         setCurrentPage(0);
         setAnnotations([]);
@@ -1125,7 +1135,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     return pages.every((page, index) => page.id === originalPageIds[index] && page.rotation % 360 === 0);
   }
 
-  async function exportPdf(filename = "opendocs-edited.pdf", success = "PDF exported successfully.", options: ExportOptions = {}) {
+  async function exportPdf(filename?: string, success = "PDF exported successfully.", options: ExportOptions = {}) {
     if (pages.length === 0) return;
     const shouldProtect = options.forceProtect ?? protectOnDownload;
     const shouldFlatten = options.forceFlatten ?? flattenOnDownload;
@@ -1141,11 +1151,15 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
           ? new Uint8Array(await currentPdfFile!.arrayBuffer())
           : await renderCurrentPdfBytes();
       const outputBytes = shouldProtect ? await encryptPDF(sourceBytes, protectPassword.trim()) : sourceBytes;
+      
+      const finalName = filename || exportFilename || "document.pdf";
+      const nameWithExt = finalName.toLowerCase().endsWith(".pdf") ? finalName : `${finalName}.pdf`;
       const outputName = shouldProtect
-        ? "opendocs-protected.pdf"
+        ? nameWithExt.replace(/\.pdf$/i, "-protected.pdf")
         : shouldFlatten
-          ? "opendocs-flattened.pdf"
-          : filename;
+          ? nameWithExt.replace(/\.pdf$/i, "-flattened.pdf")
+          : nameWithExt;
+          
       downloadPdfBytes(outputBytes, outputName);
       onStatusMessage(
         shouldProtect ? "Protected PDF downloaded." : shouldFlatten ? "Flattened PDF downloaded." : success
@@ -1744,17 +1758,49 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
           </aside>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm">
+              <div className="w-1/3 truncate text-sm font-medium text-slate-500" aria-live="polite">
+                {statusMessage}
+              </div>
+              <div className="flex flex-1 justify-center px-4">
+                <input
+                  type="text"
+                  value={exportFilename}
+                  onChange={(e) => setExportFilename(e.target.value)}
+                  className="w-full max-w-md rounded-md border border-transparent bg-transparent px-2 py-1 text-center text-sm font-semibold text-slate-800 transition hover:border-slate-200 hover:bg-slate-50 focus:border-blue-500 focus:bg-white focus:outline-none"
+                  aria-label="File name"
+                  placeholder="document.pdf"
+                />
+              </div>
+              <div className="flex w-1/3 shrink-0 items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => openPdfPicker("append")}
+                  className="rounded-md border border-slate-200 bg-white px-4 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    initialIntent === "unlock"
+                      ? void exportPdf("document-unlocked.pdf", "Unlocked PDF downloaded.")
+                      : void exportPdf()
+                  }}
+                  disabled={isExporting || pages.length === 0}
+                  className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isExporting ? "Exporting..." : "Download"}
+                </button>
+              </div>
+            </div>
+
             <AdvancedToolbar
               activeTool={activeTool} setActiveTool={handleToolChange}
               drawMode={drawMode} setDrawMode={setDrawMode}
               drawSettings={drawSettings} setDrawSettings={setDrawSettings}
               onRotatePage={rotatePage} onDeletePage={deletePage}
               onAddPageNumbers={addPageNumbers}
-              onDownload={() =>
-                initialIntent === "unlock"
-                  ? void exportPdf("opendocs-unlocked.pdf", "Unlocked PDF downloaded.")
-                  : void exportPdf()
-              }
               onUnlockPdf={() => {
                 if (!currentPdfFile) {
                   onStatusMessage("Upload a password-protected PDF first.");
@@ -1768,8 +1814,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
               protectEnabled={protectOnDownload}
               flattenEnabled={flattenOnDownload}
               onUpload={() => openPdfPicker("append")}
+              isExporting={isExporting}
               onNewPdf={() => openPdfPicker("replace")}
-              isExporting={isExporting} hasPages={pages.length > 0}
+              hasPages={pages.length > 0}
               pageCount={pages.length} currentPage={currentPage}
               annotations={annotations} onDeleteAnnotation={deleteAnnotation}
               onUpdateAnnotation={(id, updates) => {

@@ -317,22 +317,6 @@ export default function AdvancedToolbar({
             }`}
           >
             Flatten
-          </button>
-          <button
-            type="button"
-            onClick={onUpload}
-            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-50"
-          >
-            Add
-          </button>
-          <button
-            type="button"
-            onClick={onDownload}
-            disabled={isExporting}
-            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap px-4 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:text-slate-300"
-          >
-            {isExporting ? "Exporting" : "Download"}
-          </button>
         </div>
       </div>
     </div>

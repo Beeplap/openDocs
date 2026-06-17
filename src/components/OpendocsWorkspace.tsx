@@ -1002,9 +1002,11 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
       />
 
       <div className="mx-auto max-w-7xl">
-        <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" role="status" aria-live="polite">
-          {statusMessage}
-        </div>
+        {workspaceMode !== "advanced" && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" role="status" aria-live="polite">
+            {statusMessage}
+          </div>
+        )}
         <main className="space-y-5">
           {workspaceMode === "scan" ? (
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -1075,7 +1077,7 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
               onReorderPdf={reorderPdfFile}
             />
           ) : workspaceMode === "advanced" ? (
-            <AdvancedPdfEditor onStatusMessage={setStatusMessage} initialIntent={editorIntent} />
+            <AdvancedPdfEditor onStatusMessage={setStatusMessage} statusMessage={statusMessage} initialIntent={editorIntent} />
           ) : (
             <ImageConverter purpose={workspaceMode === "compress" ? "compress" : "convert"} />
           )}
