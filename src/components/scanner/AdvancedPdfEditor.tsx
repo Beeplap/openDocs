@@ -22,10 +22,10 @@ import AdvancedToolbar from "./AdvancedToolbar";
 import type { DrawMode, DrawSettings, Tool } from "./AdvancedToolbar";
 import type { WorkspaceIntent } from "../OpendocsWorkspace";
 import type { AdvancedAnnotation } from "./types";
-import { renderPdfAllPagesToCanvases, buildAnnotatedPdf } from "../../utils/pdfUtils";
+import { renderPdfAllPagesToCanvases, buildAnnotatedPdf, buildAnnotatedPdfFromSource } from "../../utils/pdfUtils";
 import { takePendingFiles } from "../../utils/pendingFiles";
 
-type PageData = { dataUrl: string; width: number; height: number; rotation: number; id: string };
+type PageData = { dataUrl: string; width: number; height: number; rotation: number; id: string; originalPageIndex?: number };
 
 type HistoryEntry = { annotations: AdvancedAnnotation[]; pages: PageData[]; };
 type EditableAnnotation = Exclude<AdvancedAnnotation, { kind: "watermark" }>;
@@ -346,10 +346,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     onStatusMessage("Loading PDF pages...");
     try {
       const canvases = await renderPdfAllPagesToCanvases(f, 2, password);
-      const pagesData: PageData[] = canvases.map((c) => ({
+      const pagesData: PageData[] = canvases.map((c, i) => ({
         id: generateId(),
         dataUrl: c.toDataURL("image/png"),
         width: c.width, height: c.height, rotation: 0,
+        originalPageIndex: i,
       }));
       const pageIds = pagesData.map((page) => page.id);
       canvases.forEach((c) => c.remove());
@@ -970,6 +971,45 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   }
 
   async function renderCurrentPdfBytes() {
+    if (currentPdfFile) {
+      const sourceBytes = new Uint8Array(await currentPdfFile.arrayBuffer());
+      const pageExports = pages.map(pg => ({
+        originalPageIndex: pg.originalPageIndex,
+        rotation: pg.rotation,
+        width: pg.width,
+        height: pg.height,
+        // Optional canvas fallback not strictly needed if we just render it here,
+        // but for now we skip rendering canvas if it has originalPageIndex
+      }));
+      
+      // We need to pass canvases for pages that do NOT have originalPageIndex
+      for (let i = 0; i < pages.length; i++) {
+        const pg = pages[i];
+        if (pg.originalPageIndex === undefined) {
+          const canvas = document.createElement("canvas");
+          const w = pg.rotation % 180 !== 0 ? pg.height : pg.width;
+          const h = pg.rotation % 180 !== 0 ? pg.width : pg.height;
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, w, h);
+            const img = await loadImg(pg.dataUrl);
+            ctx.save();
+            ctx.translate(w / 2, h / 2);
+            ctx.rotate((pg.rotation * Math.PI) / 180);
+            ctx.drawImage(img, -pg.width / 2, -pg.height / 2, pg.width, pg.height);
+            ctx.restore();
+          }
+          // @ts-expect-error - TS doesn't know about canvas property on PageDataExport
+          pageExports[i].canvas = canvas;
+        }
+      }
+      return await buildAnnotatedPdfFromSource(sourceBytes, pageExports, annotations);
+    }
+
+    // Fallback if no currentPdfFile (e.g. only appended pages without original)
     const canvases: HTMLCanvasElement[] = [];
     try {
       for (let i = 0; i < pages.length; i++) {

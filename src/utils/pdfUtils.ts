@@ -2,8 +2,9 @@
  * Utility functions for converting between image blobs and PDF documents.
  */
 
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, rgb, degrees, StandardFonts, PDFFont } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
+import type { AdvancedAnnotation } from "../components/scanner/types";
 
 const pdfWorkerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
 const CSS_PIXEL_TO_POINT = 0.75;
@@ -261,4 +262,296 @@ export async function buildAnnotatedPdf(pageCanvases: HTMLCanvasElement[]): Prom
     page.drawImage(embedded, { x: 0, y: 0, width: pageWidth, height: pageHeight });
   }
   return pdfDoc.save();
+}
+
+export type PageDataExport = {
+  originalPageIndex?: number;
+  rotation: number;
+  width: number;
+  height: number;
+  canvas?: HTMLCanvasElement;
+};
+
+function hexToRgb(hex: string) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return rgb(0, 0, 0);
+  return rgb(
+    parseInt(result[1], 16) / 255,
+    parseInt(result[2], 16) / 255,
+    parseInt(result[3], 16) / 255
+  );
+}
+
+function wrapPdfText(text: string, font: PDFFont, fontSize: number, maxWidth: number) {
+  const lines: string[] = [];
+  const paragraphs = text.split(/\r?\n/);
+  for (const paragraph of paragraphs) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      lines.push("");
+      continue;
+    }
+    let line = "";
+    for (const word of words) {
+      const nextLine = line ? `${line} ${word}` : word;
+      const width = font.widthOfTextAtSize(nextLine, fontSize);
+      if (width <= maxWidth || !line) {
+        line = nextLine;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+export async function buildAnnotatedPdfFromSource(
+  sourcePdfBytes: Uint8Array,
+  pages: PageDataExport[],
+  annotations: AdvancedAnnotation[]
+): Promise<Uint8Array> {
+  const sourcePdf = await PDFDocument.load(sourcePdfBytes);
+  const outPdf = await PDFDocument.create();
+
+  const fontRegular = await outPdf.embedFont(StandardFonts.Helvetica);
+  const fontBold = await outPdf.embedFont(StandardFonts.HelveticaBold);
+  const fontItalic = await outPdf.embedFont(StandardFonts.HelveticaOblique);
+  const fontBoldItalic = await outPdf.embedFont(StandardFonts.HelveticaBoldOblique);
+
+  const indicesToCopy = pages
+    .filter(p => p.originalPageIndex !== undefined && p.originalPageIndex >= 0 && p.originalPageIndex < sourcePdf.getPageCount())
+    .map(p => p.originalPageIndex as number);
+  
+  const copiedSourcePages = indicesToCopy.length > 0 
+    ? await outPdf.copyPages(sourcePdf, indicesToCopy) 
+    : [];
+    
+  let copiedIndex = 0;
+
+  for (let i = 0; i < pages.length; i++) {
+    const pgData = pages[i];
+    const pageAnns = annotations.filter(a => a.pageIndex === i);
+    
+    let outPage;
+    let pw = 0;
+    let ph = 0;
+
+    if (pgData.originalPageIndex !== undefined && pgData.originalPageIndex >= 0 && pgData.originalPageIndex < sourcePdf.getPageCount()) {
+      outPage = copiedSourcePages[copiedIndex++];
+      outPdf.addPage(outPage);
+      
+      const { width, height } = outPage.getSize();
+      pw = width;
+      ph = height;
+      
+      const currentRotation = outPage.getRotation().angle;
+      if (pgData.rotation !== 0) {
+        outPage.setRotation(degrees(currentRotation + pgData.rotation));
+      }
+      
+      const totalRotation = currentRotation + pgData.rotation;
+      if (totalRotation % 180 !== 0) {
+        pw = height;
+        ph = width;
+      }
+    } else if (pgData.canvas) {
+      const dataUrl = pgData.canvas.toDataURL("image/jpeg", 0.92);
+      const base64 = dataUrl.split(",")[1];
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const embedded = await outPdf.embedJpg(bytes);
+      // Fallback: 1 CSS pixel = 0.75 points
+      const pageWidth = Math.max(1, pgData.canvas.width * 0.75);
+      const pageHeight = Math.max(1, pgData.canvas.height * 0.75);
+      outPage = outPdf.addPage([pageWidth, pageHeight]);
+      outPage.drawImage(embedded, { x: 0, y: 0, width: pageWidth, height: pageHeight });
+      pw = pageWidth;
+      ph = pageHeight;
+      if (pgData.rotation !== 0) {
+        outPage.setRotation(degrees(pgData.rotation));
+      }
+    } else {
+      continue;
+    }
+
+    const T = outPage.getRotation().angle % 360;
+    const MW = outPage.getSize().width;
+    const MH = outPage.getSize().height;
+
+    for (const ann of pageAnns) {
+      if (ann.kind === "watermark") {
+        const text = ann.text;
+        const opacity = ann.opacity;
+        const fontSize = Math.max(28, Math.min(pw, ph) * 0.07);
+        const font = fontBoldItalic;
+        
+        const diagonal = Math.hypot(pw, ph);
+        const stepX = diagonal * 0.4;
+        const stepY = Math.min(pw, ph) * 0.3;
+        
+        for (let y = -diagonal; y <= ph + diagonal; y += stepY) {
+          for (let x = -diagonal; x <= pw + diagonal; x += stepX) {
+            const vx = x;
+            const vy = ph - y;
+            const rx = vx / pw;
+            const ry = vy / ph;
+            let mx_frac = rx;
+            let my_frac = 1 - ry;
+            if (T === 90 || T === -270) { mx_frac = ry; my_frac = rx; }
+            else if (T === 180 || T === -180) { mx_frac = 1 - rx; my_frac = ry; }
+            else if (T === 270 || T === -90) { mx_frac = 1 - ry; my_frac = 1 - rx; }
+
+            outPage.drawText(text, {
+              x: mx_frac * MW,
+              y: my_frac * MH,
+              size: fontSize,
+              font: font,
+              color: rgb(0.58, 0.64, 0.72),
+              opacity: opacity,
+              rotate: degrees(-45 - T),
+            });
+          }
+        }
+      } else if (ann.kind === "text") {
+        const boxW = ann.w * pw;
+        const boxH = ann.h * ph;
+        const cx = ann.x * pw;
+        const cy = ann.y * ph;
+        
+        const fontSize = Math.max(6, Math.round(ann.fontSize * (pw / 800)));
+        const lineHeight = fontSize * 1.2;
+        
+        const font = ann.bold && ann.italic ? fontBoldItalic :
+                     ann.bold ? fontBold :
+                     ann.italic ? fontItalic : fontRegular;
+                     
+        const lines = wrapPdfText(ann.text, font, fontSize, boxW);
+        const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
+        const color = hexToRgb(ann.color);
+        
+        lines.slice(0, maxLines).forEach((line, index) => {
+          const local_x = -boxW / 2;
+          const local_y = -boxH / 2 + index * lineHeight + fontSize;
+
+          const angle = (ann.rotation * Math.PI) / 180;
+          const vx = cx + local_x * Math.cos(angle) - local_y * Math.sin(angle);
+          const vy = cy + local_x * Math.sin(angle) + local_y * Math.cos(angle);
+
+          const rx = vx / pw;
+          const ry = vy / ph;
+          let mx_frac = rx;
+          let my_frac = 1 - ry;
+          if (T === 90 || T === -270) { mx_frac = ry; my_frac = rx; }
+          else if (T === 180 || T === -180) { mx_frac = 1 - rx; my_frac = ry; }
+          else if (T === 270 || T === -90) { mx_frac = 1 - ry; my_frac = 1 - rx; }
+
+          outPage.drawText(line, {
+            x: mx_frac * MW,
+            y: my_frac * MH,
+            size: fontSize,
+            font: font,
+            color: color,
+            rotate: degrees(-(ann.rotation + T)),
+          });
+        });
+      } else if (ann.kind === "highlight") {
+        const boxW = ann.w * pw;
+        const boxH = ann.h * ph;
+        const cx = ann.x * pw;
+        const cy = ann.y * ph;
+
+        const local_x = -boxW / 2;
+        const local_y = boxH / 2;
+        
+        const angle = (ann.rotation * Math.PI) / 180;
+        const vx = cx + local_x * Math.cos(angle) - local_y * Math.sin(angle);
+        const vy = cy + local_x * Math.sin(angle) + local_y * Math.cos(angle);
+
+        const rx = vx / pw;
+        const ry = vy / ph;
+        let mx_frac = rx;
+        let my_frac = 1 - ry;
+        if (T === 90 || T === -270) { mx_frac = ry; my_frac = rx; }
+        else if (T === 180 || T === -180) { mx_frac = 1 - rx; my_frac = ry; }
+        else if (T === 270 || T === -90) { mx_frac = 1 - ry; my_frac = 1 - rx; }
+
+        const color = hexToRgb(ann.color);
+        outPage.drawRectangle({
+          x: mx_frac * MW,
+          y: my_frac * MH,
+          width: boxW,
+          height: boxH,
+          color: color,
+          opacity: ann.opacity,
+          rotate: degrees(-(ann.rotation + T)),
+        });
+      } else if (ann.kind === "ink") {
+        if (ann.points.length < 2) continue;
+        const color = hexToRgb(ann.color);
+        const thickness = Math.max(1, ann.strokeWidth * (pw / 800));
+        
+        for (let j = 1; j < ann.points.length; j++) {
+          const p1 = ann.points[j - 1];
+          const p2 = ann.points[j];
+
+          const mapPoint = (rx: number, ry: number) => {
+            let mx_frac = rx;
+            let my_frac = 1 - ry;
+            if (T === 90 || T === -270) { mx_frac = ry; my_frac = rx; }
+            else if (T === 180 || T === -180) { mx_frac = 1 - rx; my_frac = ry; }
+            else if (T === 270 || T === -90) { mx_frac = 1 - ry; my_frac = 1 - rx; }
+            return { x: mx_frac * MW, y: my_frac * MH };
+          };
+
+          outPage.drawLine({
+            start: mapPoint(p1.x, p1.y),
+            end: mapPoint(p2.x, p2.y),
+            thickness: thickness,
+            color: color,
+            opacity: ann.opacity,
+          });
+        }
+      } else if (ann.kind === "signature") {
+        try {
+          const base64 = ann.dataUrl.split(",")[1];
+          const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+          const embedded = await outPdf.embedPng(bytes);
+          
+          const boxW = ann.w * pw;
+          const boxH = ann.h * ph;
+          const cx = ann.x * pw;
+          const cy = ann.y * ph;
+          
+          const local_x = -boxW / 2;
+          const local_y = boxH / 2;
+          
+          const angle = (ann.rotation * Math.PI) / 180;
+          const vx = cx + local_x * Math.cos(angle) - local_y * Math.sin(angle);
+          const vy = cy + local_x * Math.sin(angle) + local_y * Math.cos(angle);
+
+          const rx = vx / pw;
+          const ry = vy / ph;
+          let mx_frac = rx;
+          let my_frac = 1 - ry;
+          if (T === 90 || T === -270) { mx_frac = ry; my_frac = rx; }
+          else if (T === 180 || T === -180) { mx_frac = 1 - rx; my_frac = ry; }
+          else if (T === 270 || T === -90) { mx_frac = 1 - ry; my_frac = 1 - rx; }
+
+          outPage.drawImage(embedded, {
+            x: mx_frac * MW,
+            y: my_frac * MH,
+            width: boxW,
+            height: boxH,
+            opacity: ann.opacity,
+            rotate: degrees(-(ann.rotation + T)),
+          });
+        } catch (err) {
+          console.error("Failed to embed signature", err);
+        }
+      }
+    }
+  }
+
+  return await outPdf.save();
 }
