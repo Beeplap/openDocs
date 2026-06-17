@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { encryptPDF } from "@pdfsmaller/pdf-encrypt-lite";
 import {
   DndContext,
@@ -164,6 +164,8 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
   const [inkDraw, setInkDraw] = useState<{ pageIndex: number; points: { x: number; y: number }[] } | null>(null);
   const [eraserPreview, setEraserPreview] = useState<{ pageIndex: number; x: number; y: number } | null>(null);
   const [panState, setPanState] = useState<{ pointerId: number; startY: number; scrollTop: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const pendingZoomScrollRef = useRef<{ scrollLeft: number; scrollTop: number } | null>(null);
   
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -340,12 +342,54 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
     return () => window.removeEventListener("opendocs:new-pdf", handleNewPdf);
   }, []);
 
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        const scroller = scrollContainerRef.current;
+        if (scroller && scroller.contains(e.target as Node)) {
+          e.preventDefault();
+          setZoom((prev) => {
+            const newZoom = Math.min(Math.max(0.1, prev * Math.exp(e.deltaY * -0.005)), 15);
+            const scaleRatio = newZoom / prev;
+            
+            if (scaleRatio !== 1) {
+              const rect = scroller.getBoundingClientRect();
+              const cx = e.clientX - rect.left;
+              const cy = e.clientY - rect.top;
+              
+              const x = scroller.scrollLeft + cx;
+              const y = scroller.scrollTop + cy;
+              
+              pendingZoomScrollRef.current = {
+                scrollLeft: x * scaleRatio - cx,
+                scrollTop: y * scaleRatio - cy,
+              };
+            }
+            return newZoom;
+          });
+        }
+      }
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (pendingZoomScrollRef.current && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = pendingZoomScrollRef.current.scrollLeft;
+      scrollContainerRef.current.scrollTop = pendingZoomScrollRef.current.scrollTop;
+      pendingZoomScrollRef.current = null;
+    }
+  }, [zoom]);
+
   const loadPdf = useCallback(async (f: File, password?: string, options?: { append?: boolean }) => {
     const append = options?.append ?? false;
     setIsLoading(true);
     onStatusMessage("Loading PDF pages...");
     try {
-      const canvases = await renderPdfAllPagesToCanvases(f, 2, password);
+      // Increased scale to 4.5 to keep text incredibly sharp when zoomed in
+      const canvases = await renderPdfAllPagesToCanvases(f, 5.5, password);
       const pagesData: PageData[] = canvases.map((c, i) => ({
         id: generateId(),
         dataUrl: c.toDataURL("image/png"),
@@ -1177,7 +1221,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
           : "cursor-default";
 
     return (
-      <section key={pageData.id} className="mx-auto w-full max-w-[900px]">
+      <section key={pageData.id} className="mx-auto shrink-0" style={{ width: `${900 * zoom}px` }}>
         <div className="mb-2 flex items-center justify-between px-1 text-xs font-semibold text-slate-500">
           <span>Page {pageIndex + 1}</span>
           {isCurrentPage ? <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Editing</span> : null}
@@ -1739,7 +1783,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, initialIntent }: Pr
             <div
               ref={scrollContainerRef}
               onScroll={syncCurrentPageFromScroll}
-              className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-200/60 p-4 sm:p-6"
+              className="min-h-0 flex-1 overflow-auto bg-slate-200/60 p-4 sm:p-6"
             >
               {isLoading ? (
                 <div className="flex h-64 flex-col items-center justify-center gap-3">
