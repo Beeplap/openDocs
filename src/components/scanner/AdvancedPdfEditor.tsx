@@ -23,10 +23,19 @@ import AdvancedToolbar from "./AdvancedToolbar";
 import type { DrawMode, DrawSettings, Tool } from "./AdvancedToolbar";
 import type { WorkspaceIntent } from "../OpendocsWorkspace";
 import type { AdvancedAnnotation } from "./types";
-import { renderPdfAllPagesToCanvases, buildAnnotatedPdf, buildAnnotatedPdfFromSource } from "../../utils/pdfUtils";
+import { loadPdfDocumentAndMetadata, buildAnnotatedPdf, buildAnnotatedPdfFromSource } from "../../utils/pdfUtils";
 import { takePendingFiles } from "../../utils/pendingFiles";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
-type PageData = { dataUrl: string; width: number; height: number; rotation: number; id: string; originalPageIndex?: number };
+type PageData = { 
+  id: string; 
+  width: number; 
+  height: number; 
+  rotation: number; 
+  originalPageIndex?: number; 
+  dataUrl?: string; 
+  pdfDoc?: any; 
+};
 
 type HistoryEntry = { annotations: AdvancedAnnotation[]; pages: PageData[]; };
 type EditableAnnotation = Exclude<AdvancedAnnotation, { kind: "watermark" }>;
@@ -126,7 +135,7 @@ function drawWatermarkPattern(ctx: CanvasRenderingContext2D, text: string, width
 type Props = {
   onStatusMessage: (msg: string) => void;
   statusMessage?: string;
-  initialIntent: "edit" | "protect" | "flatten" | "unlock";
+  initialIntent?: WorkspaceIntent;
 };
 
 export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, initialIntent }: Props) {
@@ -168,10 +177,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   const [highlightDraw, setHighlightDraw] = useState<{pageIndex:number;startX:number;startY:number;curX:number;curY:number}|null>(null);
   const [inkDraw, setInkDraw] = useState<{ pageIndex: number; points: { x: number; y: number }[] } | null>(null);
   const [eraserPreview, setEraserPreview] = useState<{ pageIndex: number; x: number; y: number } | null>(null);
-  const [panState, setPanState] = useState<{ pointerId: number; startY: number; scrollTop: number } | null>(null);
-  const [zoom, setZoom] = useState(1);
   const [exportFilename, setExportFilename] = useState("document-edited.pdf");
-  const pendingZoomScrollRef = useRef<{ scrollLeft: number; scrollTop: number } | null>(null);
+  const thumbnailContainerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -307,7 +315,6 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
         setHighlightDraw(null);
         setInkDraw(null);
         setEraserPreview(null);
-        setPanState(null);
       } else if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedId) {
           e.preventDefault();
@@ -349,61 +356,46 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   }, []);
 
   useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        const scroller = scrollContainerRef.current;
-        if (scroller && scroller.contains(e.target as Node)) {
-          e.preventDefault();
-          setZoom((prev) => {
-            const newZoom = Math.min(Math.max(0.1, prev * Math.exp(e.deltaY * -0.005)), 15);
-            const scaleRatio = newZoom / prev;
-            
-            if (scaleRatio !== 1) {
-              const rect = scroller.getBoundingClientRect();
-              const cx = e.clientX - rect.left;
-              const cy = e.clientY - rect.top;
-              
-              const x = scroller.scrollLeft + cx;
-              const y = scroller.scrollTop + cy;
-              
-              pendingZoomScrollRef.current = {
-                scrollLeft: x * scaleRatio - cx,
-                scrollTop: y * scaleRatio - cy,
-              };
-            }
-            return newZoom;
-          });
-        }
+    if (pages.length === 0 || !scrollContainerRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.find(e => e.isIntersecting);
+      if (visible) {
+        const idx = parseInt((visible.target as HTMLElement).dataset.pageIndex || "-1", 10);
+        if (idx >= 0) setCurrentPage(idx);
       }
-    };
+    }, { root: scrollContainerRef.current, rootMargin: "-10% 0px -50% 0px" });
 
-    window.addEventListener("wheel", handleWheel, { passive: false });
-    return () => window.removeEventListener("wheel", handleWheel);
-  }, []);
+    Object.values(pageRefs.current).forEach(el => {
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [pages]);
 
-  useLayoutEffect(() => {
-    if (pendingZoomScrollRef.current && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollLeft = pendingZoomScrollRef.current.scrollLeft;
-      scrollContainerRef.current.scrollTop = pendingZoomScrollRef.current.scrollTop;
-      pendingZoomScrollRef.current = null;
+  useEffect(() => {
+    if (!thumbnailContainerRef.current) return;
+    const activeThumbnail = thumbnailContainerRef.current.querySelector(`[data-thumbnail-index="${currentPage}"]`);
+    if (activeThumbnail) {
+      activeThumbnail.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
-  }, [zoom]);
+  }, [currentPage]);
+
+
 
   const loadPdf = useCallback(async (f: File, password?: string, options?: { append?: boolean }) => {
     const append = options?.append ?? false;
     setIsLoading(true);
     onStatusMessage("Loading PDF pages...");
     try {
-      // Increased scale to 4.5 to keep text incredibly sharp when zoomed in
-      const canvases = await renderPdfAllPagesToCanvases(f, 5.5, password);
-      const pagesData: PageData[] = canvases.map((c, i) => ({
+      const { pdfDocument, pages: loadedPages } = await loadPdfDocumentAndMetadata(f, 5.5, password);
+      const pagesData: PageData[] = loadedPages.map((p) => ({
         id: generateId(),
-        dataUrl: c.toDataURL("image/png"),
-        width: c.width, height: c.height, rotation: 0,
-        originalPageIndex: i,
+        pdfDoc: pdfDocument,
+        originalPageIndex: p.originalPageIndex,
+        width: p.width,
+        height: p.height,
+        rotation: 0,
       }));
       const originalIds = pagesData.map((page) => page.id);
-      canvases.forEach((c) => c.remove());
 
       if (append && pages.length > 0) {
         const nextPages = [...pages, ...pagesData];
@@ -750,31 +742,6 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
     setContextMenu({ x: e.clientX, y: e.clientY, annotationId });
   }
 
-  function handlePanDown(e: React.PointerEvent) {
-    if (activeTool !== "pan") return;
-    const scroller = scrollContainerRef.current;
-    if (!scroller) return;
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setPanState({
-      pointerId: e.pointerId,
-      startY: e.clientY,
-      scrollTop: scroller.scrollTop,
-    });
-  }
-
-  function handlePanMove(e: React.PointerEvent) {
-    if (!panState || panState.pointerId !== e.pointerId) return;
-    const scroller = scrollContainerRef.current;
-    if (!scroller) return;
-    e.preventDefault();
-    const dy = e.clientY - panState.startY;
-    scroller.scrollTop = panState.scrollTop - dy;
-  }
-
-  function handlePanUp() {
-    setPanState(null);
-  }
 
   function handleDrawDown(e: React.PointerEvent, pageIndex: number) {
     if (activeTool !== "draw") return;
@@ -1059,12 +1026,28 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           if (ctx) {
             ctx.fillStyle = "#fff";
             ctx.fillRect(0, 0, w, h);
-            const img = await loadImg(pg.dataUrl);
-            ctx.save();
-            ctx.translate(w / 2, h / 2);
-            ctx.rotate((pg.rotation * Math.PI) / 180);
-            ctx.drawImage(img, -pg.width / 2, -pg.height / 2, pg.width, pg.height);
-            ctx.restore();
+            
+            let imgCanvas: HTMLCanvasElement | HTMLImageElement | null = null;
+            if (pg.dataUrl) {
+              imgCanvas = await loadImg(pg.dataUrl);
+            } else if (pg.pdfDoc && pg.originalPageIndex !== undefined) {
+              const page = await pg.pdfDoc.getPage(pg.originalPageIndex + 1);
+              const viewport = page.getViewport({ scale: 5.5 });
+              const tmpCanvas = document.createElement("canvas");
+              tmpCanvas.width = viewport.width;
+              tmpCanvas.height = viewport.height;
+              const tmpCtx = tmpCanvas.getContext("2d");
+              await page.render({ canvasContext: tmpCtx, viewport }).promise;
+              imgCanvas = tmpCanvas;
+            }
+
+            if (imgCanvas) {
+              ctx.save();
+              ctx.translate(w / 2, h / 2);
+              ctx.rotate((pg.rotation * Math.PI) / 180);
+              ctx.drawImage(imgCanvas, -pg.width / 2, -pg.height / 2, pg.width, pg.height);
+              ctx.restore();
+            }
           }
           // @ts-expect-error - TS doesn't know about canvas property on PageDataExport
           pageExports[i].canvas = canvas;
@@ -1088,12 +1071,27 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, w, h);
 
-        const img = await loadImg(pg.dataUrl);
-        ctx.save();
-        ctx.translate(w / 2, h / 2);
-        ctx.rotate((pg.rotation * Math.PI) / 180);
-        ctx.drawImage(img, -pg.width / 2, -pg.height / 2, pg.width, pg.height);
-        ctx.restore();
+        let imgCanvas: HTMLCanvasElement | HTMLImageElement | null = null;
+        if (pg.dataUrl) {
+          imgCanvas = await loadImg(pg.dataUrl);
+        } else if (pg.pdfDoc && pg.originalPageIndex !== undefined) {
+          const page = await pg.pdfDoc.getPage(pg.originalPageIndex + 1);
+          const viewport = page.getViewport({ scale: 5.5 });
+          const tmpCanvas = document.createElement("canvas");
+          tmpCanvas.width = viewport.width;
+          tmpCanvas.height = viewport.height;
+          const tmpCtx = tmpCanvas.getContext("2d");
+          await page.render({ canvasContext: tmpCtx, viewport }).promise;
+          imgCanvas = tmpCanvas;
+        }
+
+        if (imgCanvas) {
+          ctx.save();
+          ctx.translate(w / 2, h / 2);
+          ctx.rotate((pg.rotation * Math.PI) / 180);
+          ctx.drawImage(imgCanvas, -pg.width / 2, -pg.height / 2, pg.width, pg.height);
+          ctx.restore();
+        }
 
         const pageAnns = annotations.filter((a) => a.pageIndex === i);
         for (const ann of pageAnns) {
@@ -1245,7 +1243,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           : "cursor-default";
 
     return (
-      <section key={pageData.id} className="mx-auto shrink-0" style={{ width: `${900 * zoom}px` }}>
+      <section key={pageData.id} data-page-index={pageIndex} className="mx-auto shrink-0" style={{ width: "900px" }}>
         <div className="mb-2 flex items-center justify-between px-1 text-xs font-semibold text-slate-500">
           <span>Page {pageIndex + 1}</span>
           {isCurrentPage ? <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Editing</span> : null}
@@ -1265,25 +1263,21 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           onContextMenu={(e) => handlePageContextMenu(e, pageIndex)}
           onPointerDown={(e) => {
             setCurrentPage(pageIndex);
-            handlePanDown(e);
             handleDrawDown(e, pageIndex);
           }}
           onPointerMove={(e) => {
-            handlePanMove(e);
             handleDrawMove(e, pageIndex);
             onDragMove(e);
             onResizeMove(e);
             onRotateMove(e);
           }}
           onPointerUp={() => {
-            handlePanUp();
             handleDrawUp();
             onDragEnd();
             onResizeEnd();
             onRotateEnd();
           }}
           onPointerCancel={() => {
-            handlePanUp();
             finishEraseDraw();
             setHighlightDraw(null);
             setInkDraw(null);
@@ -1292,12 +1286,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
             onRotateEnd();
           }}
         >
-          <img
-            src={pageData.dataUrl}
+          <PdfPageRenderer
+            pageData={pageData}
             alt={`Page ${pageIndex + 1}`}
             className="h-full w-full object-contain pointer-events-none"
             style={{ transform: `rotate(${pageData.rotation}deg)` }}
-            draggable={false}
           />
 
           <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden opacity-[0.08]">
@@ -1738,7 +1731,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
             <div className="border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
               Pages
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div ref={thumbnailContainerRef} className="min-h-0 flex-1 overflow-y-auto p-4 scroll-smooth">
               <div className="flex flex-col items-center gap-4">
               <DndContext sensors={pageSortSensors} collisionDetection={closestCenter} onDragEnd={handlePageSortEnd}>
                 <SortableContext items={pages.map((pg) => pg.id)} strategy={verticalListSortingStrategy}>
@@ -1825,6 +1818,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               protectEnabled={protectOnDownload}
               flattenEnabled={flattenOnDownload}
               onUpload={() => openPdfPicker("append")}
+              onDownload={() => exportPdf()}
               isExporting={isExporting}
               onNewPdf={() => openPdfPicker("replace")}
               hasPages={pages.length > 0}
@@ -1837,11 +1831,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo}
             />
 
-            {/* Main page view */}
             <div
               ref={scrollContainerRef}
               onScroll={syncCurrentPageFromScroll}
-              className="min-h-0 flex-1 overflow-auto bg-slate-200/60 p-4 sm:p-6"
+              className="min-h-0 flex-1 overflow-auto bg-slate-200/60"
             >
               {isLoading ? (
                 <div className="flex h-64 flex-col items-center justify-center gap-3">
@@ -1849,8 +1842,25 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
                   <div className="text-sm font-medium text-slate-500">Loading PDF pages...</div>
                 </div>
               ) : (
-                <div className="mx-auto flex w-full flex-col gap-8 pb-8">
-                  {pages.map((pg, index) => renderWorkspacePage(pg, index))}
+                <div 
+                  ref={scrollContainerRef}
+                  className="flex-1 overflow-y-auto bg-slate-100 flex flex-col w-full relative"
+                >
+                  <div className="flex-1 flex justify-center w-full">
+                    <TransformWrapper
+                      initialScale={1}
+                      minScale={0.1}
+                      maxScale={8}
+                      centerOnInit={true}
+                      wheel={{ step: 0.1, activationKeys: ["Control"] }}
+                      panning={{ disabled: activeTool !== "pan" }}
+                      pinch={{ step: 5 }}
+                    >
+                      <TransformComponent wrapperClass="w-full h-full" contentClass="w-full flex flex-col gap-8 pb-8 pt-6 px-4 items-center">
+                        {pages.map((pg, index) => renderWorkspacePage(pg, index))}
+                      </TransformComponent>
+                    </TransformWrapper>
+                  </div>
 
                   <div className="flex gap-3 overflow-x-auto pb-4 w-full px-2 items-center md:hidden">
                     <DndContext sensors={pageSortSensors} collisionDetection={closestCenter} onDragEnd={handlePageSortEnd}>
@@ -1910,6 +1920,7 @@ function SortablePageThumbnail({
     <div
       ref={setNodeRef}
       style={style}
+      data-thumbnail-index={index}
       className={`${compact ? "flex flex-col gap-1" : "flex flex-col gap-2"} items-center transition ${
         isDragging ? "opacity-60" : "opacity-100"
       }`}
@@ -1929,12 +1940,11 @@ function SortablePageThumbnail({
         {...attributes}
         {...listeners}
       >
-        <img
-          src={page.dataUrl}
+        <PdfPageRenderer
+          pageData={page}
           alt={`Page ${index + 1}`}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover pointer-events-none"
           style={{ transform: `rotate(${page.rotation}deg)` }}
-          draggable={false}
         />
       </button>
       <div
@@ -1974,6 +1984,67 @@ function SortablePageThumbnail({
           <ChevronMiniIcon dir={compact ? "right" : "down"} />
         </button>
       </div>
+    </div>
+  );
+}
+
+function PdfPageRenderer({ pageData, className, style, alt }: { pageData: PageData; className?: string; style?: React.CSSProperties; alt: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [rendered, setRendered] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setIsVisible(true);
+      }
+    }, { rootMargin: "100% 0px" });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible || rendered || !canvasRef.current) return;
+    if (pageData.dataUrl) {
+      const ctx = canvasRef.current.getContext("2d");
+      const img = new Image();
+      img.onload = () => {
+        ctx?.drawImage(img, 0, 0, pageData.width, pageData.height);
+        setRendered(true);
+      };
+      img.src = pageData.dataUrl;
+      return;
+    }
+
+    if (pageData.pdfDoc && pageData.originalPageIndex !== undefined) {
+      let renderTask: any;
+      pageData.pdfDoc.getPage(pageData.originalPageIndex + 1).then((page: any) => {
+        const viewport = page.getViewport({ scale: 5.5 });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        renderTask = page.render({ canvasContext: ctx, viewport });
+        renderTask.promise.then(() => setRendered(true)).catch(() => {});
+      });
+      return () => renderTask?.cancel();
+    }
+  }, [isVisible, rendered, pageData]);
+
+  return (
+    <div ref={containerRef} className={className} style={{ ...style, position: "relative" }}>
+      {!rendered && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-slate-400">
+          <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+        </div>
+      )}
+      <canvas
+        ref={canvasRef}
+        width={pageData.width}
+        height={pageData.height}
+        className="h-full w-full object-contain pointer-events-none"
+      />
     </div>
   );
 }

@@ -218,11 +218,17 @@ export async function renderPdfPageToCanvas(
   }
 }
 
-export async function renderPdfAllPagesToCanvases(
+export interface PdfPageMetadata {
+  originalPageIndex: number;
+  width: number;
+  height: number;
+}
+
+export async function loadPdfDocumentAndMetadata(
   file: File,
-  scale = 1.5,
+  scale = 5.5,
   password?: string
-): Promise<HTMLCanvasElement[]> {
+): Promise<{ pdfDocument: any; pages: PdfPageMetadata[] }> {
   ensurePdfWorker();
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({
@@ -231,22 +237,19 @@ export async function renderPdfAllPagesToCanvases(
     isOffscreenCanvasSupported: false,
   });
   const pdf = await loadingTask.promise;
-  const canvases: HTMLCanvasElement[] = [];
-  try {
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      canvases.push(canvas);
-    }
-  } finally {
-    await pdf.destroy?.();
+  const pages: PdfPageMetadata[] = [];
+  
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale });
+    pages.push({
+      originalPageIndex: i - 1, // 0-indexed internally
+      width: viewport.width,
+      height: viewport.height,
+    });
   }
-  return canvases;
+  
+  return { pdfDocument: pdf, pages };
 }
 
 export async function buildAnnotatedPdf(pageCanvases: HTMLCanvasElement[]): Promise<Uint8Array> {
