@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useLayoutEffect, useRef } from "react";
+import { usePasteFile } from "../../hooks/usePasteFile";
 import { EditIcon, HandIcon, TrashIcon, UploadIcon } from "./icons";
 import type { MergeMode, ScanItem } from "./types";
 
@@ -43,6 +44,11 @@ export default function ScanGrid({
   const previousRectsRef = useRef(new Map<string, DOMRect>());
   const wasDraggingRef = useRef(false);
   const orderKey = displayItems.map((item) => item.id).join("|");
+
+  usePasteFile((files, fileList) => {
+    if (isProcessing) return;
+    onAddScans(fileList);
+  }, isProcessing);
 
   useLayoutEffect(() => {
     const previousRects = previousRectsRef.current;
@@ -152,6 +158,7 @@ export default function ScanGrid({
             </div>
             <h3 className="mt-4 text-base font-semibold text-slate-950">No pages yet</h3>
             <span className="mt-2 text-sm text-slate-500">Drop or choose files.</span>
+            <span className="mt-1 text-sm font-medium text-slate-400">Ctrl + V works too</span>
           </button>
         ) : (
           displayItems.map((item) => {

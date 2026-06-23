@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { usePasteFile } from "../../hooks/usePasteFile";
 import { HandIcon, TrashIcon } from "./icons";
 import type { PdfMergeItem } from "./types";
 
@@ -40,6 +41,16 @@ export default function PdfMergePanel({
   const dragPdfIdRef = React.useRef<string | null>(null);
   const [draggingPdfId, setDraggingPdfId] = React.useState<string | null>(null);
   const [dragOverPdfId, setDragOverPdfId] = React.useState<string | null>(null);
+
+  usePasteFile((files, fileList) => {
+    if (isProcessing) return;
+    const hasImage = files.some(isImageFile);
+    if (hasImage) {
+      onAddImages(fileList);
+      return;
+    }
+    onAddPdfs(fileList);
+  }, isProcessing);
 
   function startDrag(id: string, e: React.PointerEvent<HTMLElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -141,6 +152,7 @@ export default function PdfMergePanel({
               className="flex min-h-72 w-full flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center transition hover:border-slate-400 hover:bg-white"
             >
               <span className="text-base font-semibold text-slate-950">Drop or choose PDFs</span>
+              <span className="mt-1 text-sm font-medium text-slate-400">Ctrl + V works too</span>
               <span className="mt-2 text-sm text-slate-500">Use Add image to build a PDF from images with crop, edit, reorder, and two-up tools.</span>
             </button>
           ) : (

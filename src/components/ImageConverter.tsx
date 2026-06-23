@@ -68,31 +68,55 @@ function defaultOutputFormat(file: File, purpose: ConverterPurpose): OutputForma
 
 function estimateOutputSize(file: File, outputFormat: OutputFormat, quality: number, pageCount: number | null) {
   const inputFormat = detectInputFormat(file);
-  const isSameFormat = inputFormat === outputFormat;
   const inputSize = file.size;
 
-  if (isSameFormat) {
-    if (outputFormat === "image/png") return Math.max(1024, Math.round(inputSize * 0.96));
-    if (outputFormat === "image/svg+xml") return Math.max(512, Math.round(inputSize * 0.9));
-    if (outputFormat === "application/pdf") return Math.max(1024, Math.round(inputSize * (0.28 + quality * 0.72)));
-    return Math.max(1024, Math.round(inputSize * (0.16 + quality * 0.78)));
-  }
-
-  if (inputFormat === "application/pdf" && outputFormat !== "application/pdf") {
+  if (inputFormat === "application/pdf") {
     const pages = Math.max(1, pageCount ?? 1);
-    const perPageBaseline = Math.max(120 * 1024, Math.min(1.5 * 1024 * 1024, inputSize / pages));
-    const formatFactor = outputFormat === "image/png" ? 1.35 : outputFormat === "image/webp" ? 0.58 : outputFormat === "image/svg+xml" ? 1.55 : 0.72;
-    return Math.round(perPageBaseline * pages * formatFactor * (0.35 + quality * 0.75));
+    const basePageSize = 350 * 1024; // 350KB per page at medium quality
+    let formatFactor = 1.0; 
+    if (outputFormat === "image/png") formatFactor = 4.5;
+    if (outputFormat === "image/svg+xml") formatFactor = 4.5 * 1.34; 
+    if (outputFormat === "image/webp") formatFactor = 0.8;
+
+    const qualityFactor = outputFormat === "image/png" || outputFormat === "image/svg+xml" ? 1 : (0.4 + quality * 0.8);
+    return Math.round(basePageSize * pages * formatFactor * qualityFactor);
   }
 
-  if (outputFormat === "application/pdf") {
-    return Math.max(1024, Math.round(inputSize * (0.55 + quality * 0.65)));
+  if (inputFormat === outputFormat) {
+    if (outputFormat === "image/png") return Math.max(1024, Math.round(inputSize * 1.05));
+    if (outputFormat === "image/svg+xml") return Math.max(512, Math.round(inputSize * 0.8));
+    if (outputFormat === "image/webp") return Math.max(1024, Math.round(inputSize * (0.05 + Math.pow(quality, 2) * 1.35)));
+    return Math.max(1024, Math.round(inputSize * (0.05 + Math.pow(quality, 2) * 1.95)));
   }
 
-  if (outputFormat === "image/svg+xml") return Math.max(1024, Math.round(inputSize * 1.18));
-  if (outputFormat === "image/png") return Math.max(1024, Math.round(inputSize * 1.25));
-  if (outputFormat === "image/webp") return Math.max(1024, Math.round(inputSize * (0.28 + quality * 0.62)));
-  return Math.max(1024, Math.round(inputSize * (0.32 + quality * 0.72)));
+  if (outputFormat === "image/svg+xml") {
+    // Wraps the input image as a base64 string
+    return Math.max(1024, Math.round(inputSize * 1.34));
+  }
+
+  // Adjust base size if converting FROM an uncompressed/special format TO a compressed format
+  let equivalentCompressedSize = inputSize;
+  if (inputFormat === "image/png") {
+     equivalentCompressedSize = inputSize * 0.3;
+  } else if (inputFormat === "image/svg+xml") {
+     equivalentCompressedSize = inputSize * 1.5;
+  }
+
+  if (outputFormat === "image/png") {
+    if (inputFormat === "image/svg+xml") return Math.max(1024, Math.round(inputSize * 4.0));
+    // Decoding compressed formats to lossless PNG expands heavily
+    return Math.max(1024, Math.round(inputSize * 4.2));
+  }
+  
+  if (outputFormat === "application/pdf" || outputFormat === "image/jpeg") {
+    return Math.max(1024, Math.round(equivalentCompressedSize * (0.05 + Math.pow(quality, 2) * 2.35)));
+  }
+  
+  if (outputFormat === "image/webp") {
+    return Math.max(1024, Math.round(equivalentCompressedSize * (0.05 + Math.pow(quality, 2) * 1.45)));
+  }
+
+  return Math.max(1024, Math.round(equivalentCompressedSize * (0.05 + Math.pow(quality, 2) * 1.95)));
 }
 
 function qualityAffectsOutput(file: File, outputFormat: OutputFormat) {

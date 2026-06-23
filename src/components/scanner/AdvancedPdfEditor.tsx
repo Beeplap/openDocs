@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePasteFile } from "../../hooks/usePasteFile";
 import { encryptPDF } from "@pdfsmaller/pdf-encrypt-lite";
 import {
   DndContext,
@@ -470,6 +471,15 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
     }
     finally { setIsLoading(false); }
   }, [annotations, initialIntent, onStatusMessage, pages, pushState]);
+
+  usePasteFile((files) => {
+    const f = files[0];
+    if (f && f.type === "application/pdf") {
+      void loadPdf(f, undefined, { append: pages.length > 0 });
+    } else if (f) {
+      onStatusMessage("Please upload a valid PDF file.");
+    }
+  }, isLoading || isExporting);
 
   useEffect(() => {
     if (pendingFilesLoadedRef.current) return;
@@ -1717,6 +1727,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               className="group flex min-h-[400px] cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 hover:border-emerald-400 hover:bg-emerald-50/50 transition">
               <div className="text-center">
                 <h3 className="text-xl font-semibold text-slate-900">Drop or choose PDF</h3>
+                <p className="mt-2 text-sm font-medium text-slate-400">Ctrl + V works too</p>
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { usePasteFile } from "../hooks/usePasteFile";
 
 type Props = {
   onFileSelected?: (file: File) => void;
@@ -23,15 +24,21 @@ export default function Upload({
   const photoInputRef = React.useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = React.useState(false);
 
-  function pickFiles(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0) return;
-    const files = Array.from(fileList);
-    if (onFilesSelected) {
-      onFilesSelected(files);
-    } else if (onFileSelected) {
-      onFileSelected(files[0]);
-    }
-  }
+  const pickFiles = React.useCallback(
+    (fileList: FileList | File[] | null) => {
+      if (!fileList) return;
+      const files = Array.isArray(fileList) ? fileList : Array.from(fileList);
+      if (files.length === 0) return;
+      if (onFilesSelected) {
+        onFilesSelected(files);
+      } else if (onFileSelected) {
+        onFileSelected(files[0]);
+      }
+    },
+    [onFilesSelected, onFileSelected]
+  );
+
+  usePasteFile(pickFiles, disabled);
 
   function handleDrop(e: React.DragEvent<HTMLButtonElement>) {
     e.preventDefault();
@@ -84,6 +91,7 @@ export default function Upload({
         } disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <span className="text-base font-semibold text-slate-950">Drop or choose file</span>
+        <span className="mt-1 text-sm font-medium text-slate-400">Ctrl + V works too</span>
       </button>
       {showPhotoPicker ? (
         <button
