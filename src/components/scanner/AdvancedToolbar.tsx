@@ -317,6 +317,7 @@ export default function AdvancedToolbar({
             }`}
           >
             Flatten
+          </button>
         </div>
       </div>
     </div>

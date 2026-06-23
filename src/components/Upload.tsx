@@ -3,26 +3,34 @@
 import React from "react";
 
 type Props = {
-  onFileSelected: (file: File) => void;
+  onFileSelected?: (file: File) => void;
+  onFilesSelected?: (files: File[]) => void;
   disabled?: boolean;
   acceptedTypes?: string;
   showPhotoPicker?: boolean;
+  multiple?: boolean;
 };
 
 export default function Upload({
   onFileSelected,
+  onFilesSelected,
   disabled = false,
   acceptedTypes = "image/*,application/pdf,.heic,.heif",
   showPhotoPicker = true,
+  multiple = false,
 }: Props) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const photoInputRef = React.useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = React.useState(false);
 
-  function pickFirstFile(fileList: FileList | null) {
-    const file = fileList?.[0];
-    if (!file) return;
-    onFileSelected(file);
+  function pickFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    if (onFilesSelected) {
+      onFilesSelected(files);
+    } else if (onFileSelected) {
+      onFileSelected(files[0]);
+    }
   }
 
   function handleDrop(e: React.DragEvent<HTMLButtonElement>) {
@@ -30,7 +38,7 @@ export default function Upload({
     e.stopPropagation();
     setIsDragging(false);
     if (disabled) return;
-    pickFirstFile(e.dataTransfer.files);
+    pickFiles(e.dataTransfer.files);
   }
 
   return (
@@ -41,8 +49,9 @@ export default function Upload({
         accept={acceptedTypes}
         className="hidden"
         disabled={disabled}
+        multiple={multiple}
         onChange={(event) => {
-          pickFirstFile(event.target.files);
+          pickFiles(event.target.files);
           event.target.value = "";
         }}
       />
@@ -52,8 +61,9 @@ export default function Upload({
         accept="image/*,.heic,.heif"
         className="hidden"
         disabled={disabled}
+        multiple={multiple}
         onChange={(event) => {
-          pickFirstFile(event.target.files);
+          pickFiles(event.target.files);
           event.target.value = "";
         }}
       />

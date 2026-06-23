@@ -223,7 +223,7 @@ async function createZipBlob(entries: { blob: Blob; fileName: string }[]) {
 }
 
 export default function ImageConverter({ purpose = "convert" }: { purpose?: ConverterPurpose }) {
-  const [file, setFile] = React.useState<File | null>(null);
+  const [files, setFiles] = React.useState<File[]>([]);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [outputFormat, setOutputFormat] = React.useState<OutputFormat>("image/jpeg");
   const [quality, setQuality] = React.useState(0.7);
@@ -235,26 +235,24 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
   const [downloadMode, setDownloadMode] = React.useState<DownloadMode>("zip");
   const previewRunRef = React.useRef(0);
 
-  const inputFormat = file ? detectInputFormat(file) : null;
-  const isCompression = purpose === "compress" || (!!file && inputFormat === outputFormat);
+  const primaryFile = files[0] ?? null;
+  const inputFormat = primaryFile ? detectInputFormat(primaryFile) : null;
+  const isCompression = purpose === "compress" || (!!primaryFile && inputFormat === outputFormat);
   const expectsMultipleOutputs =
-    inputFormat === "application/pdf" && outputFormat !== "application/pdf" && (pdfPageCount ?? 0) > 1;
-  const fileTooLarge = !!file && file.size > MAX_UPLOAD_BYTES;
+    files.length > 1 || (inputFormat === "application/pdf" && outputFormat !== "application/pdf" && (pdfPageCount ?? 0) > 1);
+  const fileTooLarge = files.some((f) => f.size > MAX_UPLOAD_BYTES);
   const pdfTooLong = inputFormat === "application/pdf" && pdfPageCount !== null && pdfPageCount > MAX_CONVERT_PDF_PAGES;
   const availableOutputOptions = React.useMemo(() => {
     if (purpose === "compress" && inputFormat) {
       return outputOptions.filter((option) => option.value === inputFormat);
     }
-    if (purpose === "convert" && inputFormat) {
-      return outputOptions.filter((option) => option.value !== inputFormat);
-    }
     return outputOptions;
   }, [inputFormat, purpose]);
   const estimatedOutputSize = React.useMemo(() => {
-    if (!file) return null;
-    return estimateOutputSize(file, outputFormat, quality, pdfPageCount);
-  }, [file, outputFormat, pdfPageCount, quality]);
-  const canTuneQuality = file ? qualityAffectsOutput(file, outputFormat) : true;
+    if (files.length === 0) return null;
+    return files.reduce((acc, f) => acc + (estimateOutputSize(f, outputFormat, quality, pdfPageCount) || 0), 0);
+  }, [files, outputFormat, pdfPageCount, quality]);
+  const canTuneQuality = primaryFile ? qualityAffectsOutput(primaryFile, outputFormat) : true;
 
   React.useEffect(() => {
     return () => {
@@ -262,7 +260,7 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
     };
   }, [previewUrl]);
 
-  function applyOutputFormat(nextFormat: OutputFormat, nextFile = file) {
+  function applyOutputFormat(nextFormat: OutputFormat, nextFile = primaryFile) {
     setOutputFormat(nextFormat);
     setQuality(nextFile ? defaultQualityFor(nextFile, nextFormat) : 1);
     setOutputSize(null);
@@ -270,30 +268,35 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
     setDownloadMode("zip");
   }
 
-  function onFileSelected(nextFile: File) {
+  function onFilesSelected(nextFiles: File[]) {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     const runId = previewRunRef.current + 1;
     previewRunRef.current = runId;
-    const nextOutputFormat = defaultOutputFormat(nextFile, purpose);
+    
+    const nextPrimaryFile = nextFiles[0];
+    if (!nextPrimaryFile) return;
 
-    setFile(nextFile);
+    const nextOutputFormat = defaultOutputFormat(nextPrimaryFile, purpose);
+
+    setFiles(nextFiles);
     setPreviewUrl(null);
     setPdfPageCount(null);
     setOutputSize(null);
     setWarning(null);
     setOutputFormat(nextOutputFormat);
-    setQuality(defaultQualityFor(nextFile, nextOutputFormat));
+    setQuality(defaultQualityFor(nextPrimaryFile, nextOutputFormat));
     setDownloadMode("zip");
-    setStatus(purpose === "compress" ? "Adjust the quality and compress the file." : "Choose an output format and quality.");
+    setStatus(purpose === "compress" ? "Adjust the quality and compress the files." : "Choose an output format and quality.");
 
-    if (nextFile.size > MAX_UPLOAD_BYTES) {
+    const hasTooLarge = nextFiles.some((f) => f.size > MAX_UPLOAD_BYTES);
+    if (hasTooLarge) {
       setWarning(`Files are limited to ${formatBytes(MAX_UPLOAD_BYTES)} for browser processing.`);
-      setStatus("Choose a smaller file to continue.");
+      setStatus("Choose smaller files to continue.");
       return;
     }
 
-    if (detectInputFormat(nextFile) === "application/pdf") {
-      void Promise.all([getPdfFirstPagePreview(nextFile), getPdfPageCount(nextFile)])
+    if (nextFiles.length === 1 && detectInputFormat(nextPrimaryFile) === "application/pdf") {
+      void Promise.all([getPdfFirstPagePreview(nextPrimaryFile), getPdfPageCount(nextPrimaryFile)])
         .then(([previewBlob, pageCount]) => {
           if (previewRunRef.current !== runId) return;
           setPreviewUrl(URL.createObjectURL(previewBlob));
@@ -311,56 +314,65 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
       return;
     }
 
-    setPreviewUrl(URL.createObjectURL(nextFile));
+    if (nextFiles.length === 1) {
+      setPreviewUrl(URL.createObjectURL(nextPrimaryFile));
+    }
   }
 
   async function handleConvert() {
-    if (!file) return;
+    if (files.length === 0) return;
     if (fileTooLarge || pdfTooLong) {
-      setStatus(fileTooLarge ? "Choose a smaller file to continue." : "Choose a shorter PDF to continue.");
+      setStatus(fileTooLarge ? "Choose smaller files to continue." : "Choose a shorter PDF to continue.");
       return;
     }
 
     setIsConverting(true);
     setWarning(null);
-    setStatus(isCompression ? "Compressing file..." : "Converting file...");
+    setStatus(isCompression ? "Compressing..." : "Converting...");
 
     try {
-      const result = await convertFile({ file, outputFormat, quality });
-      const totalBytes = result.outputs.reduce((sum, output) => sum + output.blob.size, 0);
+      const allNamedOutputs: { blob: Blob; outputFormat: OutputFormat; fileName: string }[] = [];
+      let totalBytes = 0;
+      let hasWarning = false;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const result = await convertFile({ file, outputFormat, quality });
+        totalBytes += result.outputs.reduce((sum, output) => sum + output.blob.size, 0);
+        if (result.warning) hasWarning = true;
+
+        const baseName = file.name.replace(/\.[^/.]+$/, "");
+        result.outputs.forEach((output, index) => {
+          const extension = extensionFromMime(output.outputFormat);
+          const isMultipleForThisFile = result.outputs.length > 1;
+          const outputName =
+            isMultipleForThisFile ? `${baseName}-page-${index + 1}.${extension}` : `${baseName}-opendocs.${extension}`;
+          allNamedOutputs.push({ ...output, fileName: outputName });
+        });
+      }
+
       setOutputSize(totalBytes);
-      if (result.warning) setWarning(result.warning);
+      if (hasWarning) setWarning("Some processing issues occurred. Check outputs.");
 
-      const baseName = file.name.replace(/\.[^/.]+$/, "");
-      const namedOutputs = result.outputs.map((output, index) => {
-        const extension = extensionFromMime(output.outputFormat);
-        const outputName =
-          result.outputs.length > 1 ? `${index + 1}.${baseName}.${extension}` : `${baseName}-opendocs.${extension}`;
-        return { ...output, fileName: outputName };
-      });
-
-      if (namedOutputs.length > 1 && downloadMode === "zip") {
-        const zipBlob = await createZipBlob(namedOutputs);
-        downloadBlob(zipBlob, `${baseName}-opendocs.zip`);
+      if (allNamedOutputs.length > 1 && downloadMode === "zip") {
+        const zipBlob = await createZipBlob(allNamedOutputs);
+        const zipName = files.length > 1 ? "opendocs-batch.zip" : `${files[0].name.replace(/\.[^/.]+$/, "")}-opendocs.zip`;
+        downloadBlob(zipBlob, zipName);
       } else {
-        namedOutputs.forEach((output) => {
+        allNamedOutputs.forEach((output) => {
           downloadBlob(output.blob, output.fileName);
         });
       }
 
       setStatus(
-        result.outputs.length > 1
-          ? `${isCompression ? "Compressed" : "Converted"} ${result.outputs.length} files ${
+        allNamedOutputs.length > 1
+          ? `${isCompression ? "Compressed" : "Converted"} ${allNamedOutputs.length} files ${
               downloadMode === "zip" ? "in a ZIP." : "separately."
             }`
           : `${isCompression ? "Compressed" : "Converted"} file downloaded.`
       );
     } catch {
-      if (file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif")) {
-        setStatus("HEIC decode failed in this browser. Try another source image.");
-      } else {
-        setStatus("Processing failed. Try another format or quality.");
-      }
+      setStatus("Processing failed. Try another format or quality.");
     } finally {
       setIsConverting(false);
     }
@@ -373,24 +385,30 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
       </div>
 
       <div className="mt-4 space-y-4">
-        <Upload onFileSelected={onFileSelected} acceptedTypes="image/*,application/pdf,.heic,.heif,.svg" disabled={isConverting} />
+        <Upload onFilesSelected={onFilesSelected} multiple={true} acceptedTypes="image/*,application/pdf,.heic,.heif,.svg" disabled={isConverting} />
 
-        {file ? (
+        {files.length > 0 ? (
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              {previewUrl ? (
-                <img src={previewUrl} alt={`Preview of ${file.name}`} className="aspect-square w-full object-contain bg-slate-50" />
+              {files.length === 1 && previewUrl ? (
+                <img src={previewUrl} alt={`Preview`} className="aspect-square w-full object-contain bg-slate-50" />
               ) : (
-                <div className="grid aspect-square place-items-center p-6 text-center text-sm text-slate-500">
-                  Preview unavailable
+                <div className="grid aspect-square place-items-center p-6 text-center text-sm text-slate-500 bg-slate-50">
+                  {files.length === 1 ? "Preview unavailable" : `${files.length} files selected`}
                 </div>
               )}
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-              <p className="font-semibold text-slate-900">{file.name}</p>
-              <p className="mt-1 text-slate-600">Original format: {mimeLabel(inputFormat ?? file.type)}</p>
-              <p className="mt-1 text-slate-600">Original size: {formatBytes(file.size)}</p>
-              {pdfPageCount ? <p className="mt-1 text-slate-600">Pages: {pdfPageCount}</p> : null}
+              <p className="font-semibold text-slate-900">{files.length === 1 ? files[0].name : `${files.length} files`}</p>
+              {files.length === 1 ? (
+                <>
+                  <p className="mt-1 text-slate-600">Original format: {mimeLabel(inputFormat ?? files[0].type)}</p>
+                  <p className="mt-1 text-slate-600">Original size: {formatBytes(files[0].size)}</p>
+                  {pdfPageCount ? <p className="mt-1 text-slate-600">Pages: {pdfPageCount}</p> : null}
+                </>
+              ) : (
+                <p className="mt-1 text-slate-600">Total size: {formatBytes(files.reduce((acc, f) => acc + f.size, 0))}</p>
+              )}
               <p className="mt-1 text-slate-600">Mode: {isCompression ? "Compression" : "Conversion"}</p>
               {estimatedOutputSize !== null ? (
                 <p className="mt-1 text-indigo-700">Estimated output size: {formatBytes(estimatedOutputSize)}</p>
@@ -400,7 +418,7 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
           </div>
         ) : null}
 
-        {file ? (
+        {files.length > 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <label className="block">
               <span className="text-sm font-semibold text-slate-800">Output format</span>
@@ -496,7 +514,7 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
           </div>
         ) : null}
 
-        {file ? <p className="text-sm text-slate-500">{status}</p> : null}
+        {files.length > 0 ? <p className="text-sm text-slate-500">{status}</p> : null}
       </div>
     </section>
   );
