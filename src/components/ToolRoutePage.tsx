@@ -1,8 +1,8 @@
 import OpendocsWorkspace from "./OpendocsWorkspace";
 import EditorHeaderActions from "./EditorHeaderActions";
 import ToolMegaMenu from "./ToolMegaMenu";
-import { getRoute, getSiteUrl, siteDescription, siteName } from "../lib/siteRoutes";
-import type { ToolRoute, WorkspaceMode } from "../lib/siteRoutes";
+import { getRoute, getSiteUrl, siteName } from "../lib/siteRoutes";
+import type { ToolRoute } from "../lib/siteRoutes";
 
 type Props = {
   route: ToolRoute;

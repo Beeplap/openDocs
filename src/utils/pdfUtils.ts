@@ -4,6 +4,7 @@
 
 import { PDFDocument, rgb, degrees, StandardFonts, PDFFont } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { AdvancedAnnotation } from "../components/scanner/types";
 
 const pdfWorkerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
@@ -171,7 +172,7 @@ export async function pdfToImages(file: File): Promise<Blob[]> {
   const result: Blob[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 5 });
+    const viewport = page.getViewport({ scale: 2.0 });
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
@@ -226,9 +227,9 @@ export interface PdfPageMetadata {
 
 export async function loadPdfDocumentAndMetadata(
   file: File,
-  scale = 5.5,
+  scale = 2.0,
   password?: string
-): Promise<{ pdfDocument: any; pages: PdfPageMetadata[] }> {
+): Promise<{ pdfDocument: PDFDocumentProxy; pages: PdfPageMetadata[] }> {
   ensurePdfWorker();
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({
@@ -236,7 +237,7 @@ export async function loadPdfDocumentAndMetadata(
     password,
     isOffscreenCanvasSupported: false,
   });
-  const pdf = await loadingTask.promise;
+  const pdf = (await loadingTask.promise) as unknown as PDFDocumentProxy;
   const pages: PdfPageMetadata[] = [];
   
   for (let i = 1; i <= pdf.numPages; i++) {

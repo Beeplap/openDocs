@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePasteFile } from "../../hooks/usePasteFile";
 import { encryptPDF } from "@pdfsmaller/pdf-encrypt-lite";
 import {
@@ -27,6 +27,8 @@ import { loadPdfDocumentAndMetadata, buildAnnotatedPdf, buildAnnotatedPdfFromSou
 import { takePendingFiles } from "../../utils/pendingFiles";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
+import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
+
 type PageData = { 
   id: string; 
   width: number; 
@@ -34,7 +36,7 @@ type PageData = {
   rotation: number; 
   originalPageIndex?: number; 
   dataUrl?: string; 
-  pdfDoc?: any; 
+  pdfDoc?: PDFDocumentProxy; 
 };
 
 type HistoryEntry = { annotations: AdvancedAnnotation[]; pages: PageData[]; };
@@ -178,8 +180,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   const [inkDraw, setInkDraw] = useState<{ pageIndex: number; points: { x: number; y: number }[] } | null>(null);
   const [eraserPreview, setEraserPreview] = useState<{ pageIndex: number; x: number; y: number } | null>(null);
   const [exportFilename, setExportFilename] = useState("document-edited.pdf");
+  const [zoomScale, setZoomScale] = useState(1);
   const thumbnailContainerRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+
   
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1032,12 +1035,14 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               imgCanvas = await loadImg(pg.dataUrl);
             } else if (pg.pdfDoc && pg.originalPageIndex !== undefined) {
               const page = await pg.pdfDoc.getPage(pg.originalPageIndex + 1);
-              const viewport = page.getViewport({ scale: 5.5 });
+              const viewport = page.getViewport({ scale: 2.0 });
               const tmpCanvas = document.createElement("canvas");
               tmpCanvas.width = viewport.width;
               tmpCanvas.height = viewport.height;
               const tmpCtx = tmpCanvas.getContext("2d");
-              await page.render({ canvasContext: tmpCtx, viewport }).promise;
+              if (tmpCtx) {
+                await page.render({ canvasContext: tmpCtx, viewport } as any).promise;
+              }
               imgCanvas = tmpCanvas;
             }
 
@@ -1076,12 +1081,14 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           imgCanvas = await loadImg(pg.dataUrl);
         } else if (pg.pdfDoc && pg.originalPageIndex !== undefined) {
           const page = await pg.pdfDoc.getPage(pg.originalPageIndex + 1);
-          const viewport = page.getViewport({ scale: 5.5 });
+          const viewport = page.getViewport({ scale: 2.0 });
           const tmpCanvas = document.createElement("canvas");
           tmpCanvas.width = viewport.width;
           tmpCanvas.height = viewport.height;
           const tmpCtx = tmpCanvas.getContext("2d");
-          await page.render({ canvasContext: tmpCtx, viewport }).promise;
+          if (tmpCtx) {
+            await page.render({ canvasContext: tmpCtx, viewport } as any).promise;
+          }
           imgCanvas = tmpCanvas;
         }
 
@@ -1244,10 +1251,6 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
 
     return (
       <section key={pageData.id} data-page-index={pageIndex} className="mx-auto shrink-0" style={{ width: "900px" }}>
-        <div className="mb-2 flex items-center justify-between px-1 text-xs font-semibold text-slate-500">
-          <span>Page {pageIndex + 1}</span>
-          {isCurrentPage ? <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Editing</span> : null}
-        </div>
         <div
           ref={(el) => {
             pageRefs.current[pageIndex] = el;
@@ -1787,9 +1790,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
                 <button
                   type="button"
                   onClick={() => {
-                    initialIntent === "unlock"
-                      ? void exportPdf("document-unlocked.pdf", "Unlocked PDF downloaded.")
-                      : void exportPdf()
+                    if (initialIntent === "unlock") {
+                      void exportPdf("document-unlocked.pdf", "Unlocked PDF downloaded.");
+                    } else {
+                      void exportPdf();
+                    }
                   }}
                   disabled={isExporting || pages.length === 0}
                   className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
@@ -1842,45 +1847,239 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
                   <div className="text-sm font-medium text-slate-500">Loading PDF pages...</div>
                 </div>
               ) : (
-                <div 
-                  ref={scrollContainerRef}
-                  className="flex-1 overflow-y-auto bg-slate-100 flex flex-col w-full relative"
+                <>
+                <TransformWrapper
+                  initialScale={1}
+                  minScale={0.25}
+                  maxScale={3}
+                  smooth={false}
+                  centerOnInit={true}
+                  wheel={{ disabled: true }}
+                  panning={{ disabled: activeTool !== "pan" }}
+                  pinch={{ disabled: true }}
+                  onTransform={(ref) => {
+                    setZoomScale(ref.state.scale);
+                  }}
                 >
-                  <div className="flex-1 flex justify-center w-full">
-                    <TransformWrapper
-                      initialScale={1}
-                      minScale={0.1}
-                      maxScale={8}
-                      centerOnInit={true}
-                      wheel={{ step: 0.1, activationKeys: ["Control"] }}
-                      panning={{ disabled: activeTool !== "pan" }}
-                      pinch={{ step: 5 }}
-                    >
-                      <TransformComponent wrapperClass="w-full h-full" contentClass="w-full flex flex-col gap-8 pb-8 pt-6 px-4 items-center">
-                        {pages.map((pg, index) => renderWorkspacePage(pg, index))}
-                      </TransformComponent>
-                    </TransformWrapper>
-                  </div>
+                  {({ zoomIn, zoomOut, resetTransform, centerView, setTransform, instance }) => {
+                    const zoomWrapRef = (node: HTMLDivElement | null) => {
+                      if (!node) return;
+                      const nodeExt = node as HTMLDivElement & { __zoomBound?: boolean };
+                      if (nodeExt.__zoomBound) return;
+                      nodeExt.__zoomBound = true;
+                      node.addEventListener("wheel", (e) => {
+                        if (!e.ctrlKey && !e.metaKey) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const { scale, positionX, positionY } = instance.state;
+                        const step = 0.08;
+                        const direction = e.deltaY < 0 ? 1 : -1;
+                        const newScale = Math.min(3, Math.max(0.25, scale + direction * step));
+                        
+                        if (newScale !== scale) {
+                          const rect = node.getBoundingClientRect();
+                          const mouseX = e.clientX - rect.left;
+                          const mouseY = e.clientY - rect.top;
+                          
+                          const targetX = (mouseX - positionX) / scale;
+                          const targetY = (mouseY - positionY) / scale;
+                          
+                          const newPositionX = mouseX - targetX * newScale;
+                          const newPositionY = mouseY - targetY * newScale;
+                          
+                          setTransform(newPositionX, newPositionY, newScale, 0);
+                        }
+                      }, { passive: false });
+                    };
+                    return (
+                      <div className="flex-1 relative w-full h-full min-h-0 flex flex-col">
+                        <div 
+                          ref={scrollContainerRef}
+                          onScroll={syncCurrentPageFromScroll}
+                          className="absolute inset-0 overflow-y-auto bg-slate-100 flex flex-col w-full"
+                        >
+                          <div className="flex-1 flex justify-center w-full min-h-max" ref={zoomWrapRef}>
+                            <TransformComponent wrapperClass="w-full h-full" contentClass="w-full flex flex-col gap-8 pb-8 pt-6 px-4 items-center">
+                              {pages.map((pg, index) => renderWorkspacePage(pg, index))}
+                            </TransformComponent>
+                          </div>
+                        </div>
 
-                  <div className="flex gap-3 overflow-x-auto pb-4 w-full px-2 items-center md:hidden">
-                    <DndContext sensors={pageSortSensors} collisionDetection={closestCenter} onDragEnd={handlePageSortEnd}>
-                      <SortableContext items={pages.map((pg) => pg.id)} strategy={horizontalListSortingStrategy}>
-                        {pages.map((pg, i) => (
-                          <SortablePageThumbnail
-                            key={pg.id}
-                            page={pg}
-                            index={i}
-                            currentPage={currentPage}
-                            pageCount={pages.length}
-                            onSelect={() => selectPage(i, { scrollIntoView: true })}
-                            onMove={reorderPage}
-                            compact
-                          />
-                        ))}
-                      </SortableContext>
-                    </DndContext>
-                  </div>
+                          {/* Floating page indicator */}
+                          <div
+                            style={{
+                              position: "absolute",
+                              bottom: 16,
+                              left: 16,
+                              zIndex: 50,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              background: "rgba(15, 23, 42, 0.82)",
+                              backdropFilter: "blur(12px)",
+                              WebkitBackdropFilter: "blur(12px)",
+                              borderRadius: 10,
+                              padding: "6px 12px",
+                              boxShadow: "0 4px 24px rgba(0,0,0,0.22), 0 1px 4px rgba(0,0,0,0.12)",
+                              userSelect: "none",
+                              color: "#e2e8f0",
+                              fontSize: 12,
+                              fontWeight: 600,
+                            }}
+                          >
+                            <span>Page {currentPage + 1} of {pages.length}</span>
+                            <span style={{ color: "#60a5fa", fontWeight: 500, marginLeft: 4 }}>Editing</span>
+                          </div>
+                          {/* Canva-like floating zoom toolbar */}
+                          <div
+                            style={{
+                              position: "absolute",
+                              bottom: 16,
+                              left: "50%",
+                              transform: "translateX(-50%)",
+                              zIndex: 50,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 2,
+                              background: "rgba(15, 23, 42, 0.82)",
+                              backdropFilter: "blur(12px)",
+                              WebkitBackdropFilter: "blur(12px)",
+                              borderRadius: 10,
+                              padding: "4px 6px",
+                              boxShadow: "0 4px 24px rgba(0,0,0,0.22), 0 1px 4px rgba(0,0,0,0.12)",
+                              userSelect: "none",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              title="Zoom out"
+                              onClick={() => zoomOut(0.1)}
+                              style={{
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                width: 32, height: 32, borderRadius: 7,
+                                background: "transparent", border: "none",
+                                color: "#e2e8f0", cursor: "pointer", fontSize: 18, fontWeight: 600,
+                                transition: "background 0.15s",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                            >
+                              −
+                            </button>
+
+                            <button
+                              type="button"
+                              title="Reset to 100%"
+                              onClick={() => {
+                                resetTransform();
+                                setZoomScale(1);
+                              }}
+                              style={{
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                minWidth: 52, height: 28, borderRadius: 5, padding: "0 6px",
+                                background: "transparent", border: "none",
+                                color: "#cbd5e1", cursor: "pointer",
+                                fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                                letterSpacing: "0.01em",
+                                transition: "background 0.15s",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                            >
+                              {Math.round(zoomScale * 100)}%
+                            </button>
+
+                            <button
+                              type="button"
+                              title="Zoom in"
+                              onClick={() => zoomIn(0.1)}
+                              style={{
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                width: 32, height: 32, borderRadius: 7,
+                                background: "transparent", border: "none",
+                                color: "#e2e8f0", cursor: "pointer", fontSize: 18, fontWeight: 600,
+                                transition: "background 0.15s",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                            >
+                              +
+                            </button>
+
+                            <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.15)", margin: "0 2px" }} />
+
+                            <button
+                              type="button"
+                              title="Fit to screen"
+                              onClick={() => {
+                                centerView(undefined, 300, "easeOut");
+                              }}
+                              style={{
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                width: 32, height: 32, borderRadius: 7,
+                                background: "transparent", border: "none",
+                                color: "#e2e8f0", cursor: "pointer",
+                                transition: "background 0.15s",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="2" width="12" height="12" rx="2" />
+                                <path d="M2 6h12M2 10h12M6 2v12M10 2v12" opacity="0.35" />
+                              </svg>
+                            </button>
+
+                            <button
+                              type="button"
+                              title="Reset view"
+                              onClick={() => {
+                                resetTransform(300, "easeOut");
+                                setZoomScale(1);
+                              }}
+                              style={{
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                width: 32, height: 32, borderRadius: 7,
+                                background: "transparent", border: "none",
+                                color: "#e2e8f0", cursor: "pointer",
+                                transition: "background 0.15s",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3 8a5 5 0 0 1 9.5-1.5" />
+                                <path d="M13 8a5 5 0 0 1-9.5 1.5" />
+                                <polyline points="3 3 3 6.5 6.5 6.5" />
+                                <polyline points="13 13 13 9.5 9.5 9.5" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }}
+                </TransformWrapper>
+
+                <div className="flex gap-3 overflow-x-auto pb-4 pt-2 w-full px-2 items-center md:hidden bg-white shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40">
+                  <DndContext sensors={pageSortSensors} collisionDetection={closestCenter} onDragEnd={handlePageSortEnd}>
+                    <SortableContext items={pages.map((pg) => pg.id)} strategy={horizontalListSortingStrategy}>
+                      {pages.map((pg, i) => (
+                        <SortablePageThumbnail
+                          key={pg.id}
+                          page={pg}
+                          index={i}
+                          currentPage={currentPage}
+                          pageCount={pages.length}
+                          onSelect={() => selectPage(i, { scrollIntoView: true })}
+                          onMove={reorderPage}
+                          compact
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 </div>
+                </>
               )}
             </div>
           </div>
@@ -1988,7 +2187,7 @@ function SortablePageThumbnail({
   );
 }
 
-function PdfPageRenderer({ pageData, className, style, alt }: { pageData: PageData; className?: string; style?: React.CSSProperties; alt: string }) {
+function PdfPageRenderer({ pageData, className, style }: { pageData: PageData; className?: string; style?: React.CSSProperties; alt?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -1997,54 +2196,69 @@ function PdfPageRenderer({ pageData, className, style, alt }: { pageData: PageDa
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setIsVisible(true);
+      const intersecting = entries[0].isIntersecting;
+      setIsVisible(intersecting);
+      if (!intersecting) {
+        setRendered(false);
       }
-    }, { rootMargin: "100% 0px" });
+    }, { rootMargin: "150% 0px" });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
     if (!isVisible || rendered || !canvasRef.current) return;
+    let isMounted = true;
     if (pageData.dataUrl) {
       const ctx = canvasRef.current.getContext("2d");
       const img = new Image();
       img.onload = () => {
+        if (!isMounted) return;
         ctx?.drawImage(img, 0, 0, pageData.width, pageData.height);
         setRendered(true);
       };
       img.src = pageData.dataUrl;
-      return;
+      return () => { isMounted = false; };
     }
 
     if (pageData.pdfDoc && pageData.originalPageIndex !== undefined) {
-      let renderTask: any;
-      pageData.pdfDoc.getPage(pageData.originalPageIndex + 1).then((page: any) => {
-        const viewport = page.getViewport({ scale: 5.5 });
+      let renderTask: ReturnType<PDFPageProxy["render"]> | undefined;
+      let loadedPage: PDFPageProxy | undefined;
+      pageData.pdfDoc.getPage(pageData.originalPageIndex + 1).then((page: PDFPageProxy) => {
+        loadedPage = page;
+        if (!isMounted || !canvasRef.current) return;
+        const viewport = page.getViewport({ scale: 2.0 });
         const canvas = canvasRef.current;
-        if (!canvas) return;
         const ctx = canvas.getContext("2d");
-        renderTask = page.render({ canvasContext: ctx, viewport });
-        renderTask.promise.then(() => setRendered(true)).catch(() => {});
+        if (!ctx) return;
+        renderTask = page.render({ canvasContext: ctx, viewport } as any);
+        renderTask.promise.then(() => {
+          if (isMounted) setRendered(true);
+        }).catch(() => {});
       });
-      return () => renderTask?.cancel();
+      return () => {
+        isMounted = false;
+        renderTask?.cancel();
+        loadedPage?.cleanup();
+      };
     }
   }, [isVisible, rendered, pageData]);
 
   return (
     <div ref={containerRef} className={className} style={{ ...style, position: "relative" }}>
-      {!rendered && (
+      {(!rendered || !isVisible) && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-slate-400">
           <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
         </div>
       )}
-      <canvas
-        ref={canvasRef}
-        width={pageData.width}
-        height={pageData.height}
-        className="h-full w-full object-contain pointer-events-none"
-      />
+      {isVisible && (
+        <canvas
+          ref={canvasRef}
+          width={pageData.width}
+          height={pageData.height}
+          className="h-full w-full object-contain pointer-events-none"
+        />
+      )}
     </div>
   );
 }

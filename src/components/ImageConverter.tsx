@@ -383,9 +383,10 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
         const zipName = files.length > 1 ? "opendocs-batch.zip" : `${files[0].name.replace(/\.[^/.]+$/, "")}-opendocs.zip`;
         downloadBlob(zipBlob, zipName);
       } else {
-        allNamedOutputs.forEach((output) => {
+        for (const output of allNamedOutputs) {
           downloadBlob(output.blob, output.fileName);
-        });
+          await new Promise((r) => setTimeout(r, 300));
+        }
       }
 
       setStatus(

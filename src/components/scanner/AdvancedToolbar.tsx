@@ -81,7 +81,6 @@ export default function AdvancedToolbar({
   onRotatePage,
   onDeletePage,
   onAddPageNumbers,
-  onDownload,
   onUnlockPdf,
   onProtectPdf,
   onFlattenPdf,
