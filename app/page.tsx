@@ -64,49 +64,72 @@ export default function HomePage() {
   const moreTools = toolRoutes.filter((tool) => tool.path !== "/" && !popularToolPaths.includes(tool.path));
 
   return (
-    <main className="app-shell min-h-screen">
+    <main className="app-shell min-h-screen relative overflow-hidden">
+      {/* Decorative Background Blob */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-accent opacity-5 blur-[100px] pointer-events-none" />
+      <div className="absolute top-[20%] right-[-5%] w-[40%] h-[40%] rounded-full bg-brand opacity-5 blur-[120px] pointer-events-none" />
+
       <ToolMegaMenu />
 
-      <section className="landing-page px-4 py-10 sm:px-6 lg:px-8">
+      <section className="landing-page px-4 py-16 sm:px-6 lg:px-8 relative z-10">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Most Popular PDF Tools</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6">
-                Fast, private document tools for scanning, merging, converting, editing, signing, and securing files in
-                your browser.
-              </p>
+          {/* Hero Section */}
+          <div className="mb-16 flex flex-col items-center text-center animate-fade-up" style={{ animationDelay: '0ms' }}>
+            <h1 className="display-font text-5xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl mb-4 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-muted">
+              Your Complete PDF Suite
+            </h1>
+            <p className="max-w-2xl text-lg leading-relaxed text-muted mb-8">
+              Fast, private document tools for scanning, merging, converting, editing, signing, and securing files entirely in
+              your browser. Zero uploads to external servers.
+            </p>
+            <div className="flex justify-center scale-110">
+              <LandingUploadButton>
+                <UploadIcon />
+                <span>Upload a Document</span>
+                <ChevronDownIcon />
+              </LandingUploadButton>
             </div>
-            <LandingUploadButton>
-              <UploadIcon />
-              <span>Upload</span>
-              <ChevronDownIcon />
-            </LandingUploadButton>
           </div>
 
-          <ToolGrid tools={popularTools} />
+          <div className="animate-fade-up" style={{ animationDelay: '200ms' }}>
+            <h2 className="mb-6 text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
+              <span className="w-8 h-[2px] bg-accent rounded-full"></span>
+              Most Popular Tools
+            </h2>
+            <ToolGrid tools={popularTools} delayStart={300} />
+          </div>
 
-          <h2 className="mb-6 mt-12 text-2xl font-bold tracking-tight">More tools</h2>
-          <ToolGrid tools={moreTools} />
+          <div className="animate-fade-up mt-20" style={{ animationDelay: '400ms' }}>
+            <h2 className="mb-6 text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
+              <span className="w-8 h-[2px] bg-brand rounded-full"></span>
+              More Capabilities
+            </h2>
+            <ToolGrid tools={moreTools} delayStart={500} />
+          </div>
         </div>
       </section>
     </main>
   );
 }
 
-function ToolGrid({ tools }: { tools: NonNullable<ReturnType<typeof getRoute>>[] }) {
+function ToolGrid({ tools, delayStart = 0 }: { tools: NonNullable<ReturnType<typeof getRoute>>[], delayStart?: number }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {tools.map((tool) => {
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {tools.map((tool, idx) => {
         const label = getToolLabel(tool.path, tool.title);
         return (
-          <Link key={tool.path} href={tool.path} className="landing-tool-card">
-            <span className={`landing-tool-icon ${sectionTone[tool.mode]}`} aria-hidden="true">
+          <Link 
+            key={tool.path} 
+            href={tool.path} 
+            className="landing-tool-card animate-fade-up group" 
+            style={{ animationDelay: `${delayStart + idx * 50}ms` }}
+          >
+            <span className={`landing-tool-icon shadow-lg transition-transform duration-300 group-hover:scale-110 ${sectionTone[tool.mode]}`} aria-hidden="true">
               {toolInitials(label)}
             </span>
             <span className="landing-tool-content">
-              <span className="landing-tool-title text-lg font-bold">{label}</span>
-              <span className="landing-tool-description mt-1 text-sm">{tool.description}</span>
+              <span className="landing-tool-title text-base font-bold text-foreground transition-colors duration-300 group-hover:text-accent">{label}</span>
+              <span className="landing-tool-description mt-1 text-xs text-muted opacity-80">{tool.description}</span>
             </span>
           </Link>
         );

@@ -959,9 +959,9 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
 
 
   return (
-    <div className="min-h-screen px-4 py-4 text-slate-900 sm:px-6 lg:px-8">
+    <div className="min-h-screen px-4 py-4 text-foreground sm:px-6 lg:px-8">
       {!isClient ? (
-        <div className="mx-auto max-w-7xl rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
+        <div className="mx-auto max-w-7xl glass-panel p-8 text-sm text-muted">
           Loading OpenDocs...
         </div>
       ) : null}
@@ -1003,8 +1003,14 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
 
       <div className="mx-auto max-w-7xl">
         {workspaceMode !== "advanced" && (
-          <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" role="status" aria-live="polite">
-            {statusMessage}
+          <div className="mb-6 glass-panel px-5 py-4 text-sm font-medium text-foreground shadow-sm transition-all duration-300" role="status" aria-live="polite">
+            <span className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent"></span>
+              </span>
+              {statusMessage}
+            </span>
           </div>
         )}
         <main className="space-y-5">

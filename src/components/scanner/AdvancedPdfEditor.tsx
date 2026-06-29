@@ -149,6 +149,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyIndexRef = useRef(-1);
 
   const [activeTool, setActiveTool] = useState<Tool>(() => initialToolForIntent(initialIntent));
   const [drawMode, setDrawMode] = useState<DrawMode>(() => initialDrawModeForIntent(initialIntent));
@@ -206,39 +207,42 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
 
   const pushState = useCallback((newAnns: AdvancedAnnotation[], newPgs: PageData[]) => {
     setHistory((prev) => {
-      const h = prev.slice(0, historyIndex + 1);
+      const h = prev.slice(0, historyIndexRef.current + 1);
       h.push({ annotations: newAnns, pages: newPgs });
-      if (h.length > 6) h.shift(); // Keep ~5 redos
+      if (h.length > 50) h.shift(); // Keep 50 redos
+      historyIndexRef.current = h.length - 1;
       setHistoryIndex(h.length - 1);
       return h;
     });
     setAnnotations(newAnns);
     setPages(newPgs);
-  }, [historyIndex]);
+  }, []);
 
   const undo = useCallback(() => {
     setHistory((prev) => {
-      if (historyIndex > 0) {
-        const nextIdx = historyIndex - 1;
+      if (historyIndexRef.current > 0) {
+        const nextIdx = historyIndexRef.current - 1;
         setAnnotations(prev[nextIdx].annotations);
         setPages(prev[nextIdx].pages);
+        historyIndexRef.current = nextIdx;
         setHistoryIndex(nextIdx);
       }
       return prev;
     });
-  }, [historyIndex]);
+  }, []);
 
   const redo = useCallback(() => {
     setHistory((prev) => {
-      if (historyIndex < prev.length - 1) {
-        const nextIdx = historyIndex + 1;
+      if (historyIndexRef.current < prev.length - 1) {
+        const nextIdx = historyIndexRef.current + 1;
         setAnnotations(prev[nextIdx].annotations);
         setPages(prev[nextIdx].pages);
+        historyIndexRef.current = nextIdx;
         setHistoryIndex(nextIdx);
       }
       return prev;
     });
-  }, [historyIndex]);
+  }, []);
 
   const getEditableAnnotation = useCallback((id: string | null): EditableAnnotation | null => {
     if (!id) return null;
@@ -413,6 +417,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
         onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} added.`);
       } else {
         setHistory([{ annotations: [], pages: pagesData }]);
+        historyIndexRef.current = 0;
         setHistoryIndex(0);
         setCurrentPdfFile(f);
         setOriginalPageIds(originalIds);
@@ -799,42 +804,52 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   }
 
   function finishHighlightDraw() {
-    if (!highlightDraw) return;
-    const startX = highlightDraw.startX;
-    const startY = highlightDraw.startY;
-    const curX = highlightDraw.curX;
-    const curY = highlightDraw.curY;
-    const w = Math.abs(curX - startX);
-    const h = Math.abs(curY - startY);
-    const cx = Math.min(startX, curX) + w/2;
-    const cy = Math.min(startY, curY) + h/2;
-
-    if (w > 0.01 && h > 0.005) {
-      pushState([...annotations, {
-        kind: "highlight", id: generateId(), pageIndex: highlightDraw.pageIndex,
-        x: cx, y: cy, w, h, rotation: 0, color: drawSettings.highlighterColor, opacity: drawSettings.highlighterOpacity,
-      }], pages);
-      setCurrentPage(highlightDraw.pageIndex);
-    }
-    setHighlightDraw(null);
+    setHighlightDraw((h) => {
+      if (!h) return null;
+      const startX = h.startX;
+      const startY = h.startY;
+      const curX = h.curX;
+      const curY = h.curY;
+      const w = Math.abs(curX - startX);
+      const h_h = Math.abs(curY - startY);
+      const cx = Math.min(startX, curX) + w/2;
+      const cy = Math.min(startY, curY) + h_h/2;
+  
+      if (w > 0.01 && h_h > 0.005) {
+        setAnnotations((a) => {
+          const next = [...a, {
+            kind: "highlight" as const, id: generateId(), pageIndex: h.pageIndex,
+            x: cx, y: cy, w, h: h_h, rotation: 0, color: drawSettings.highlighterColor, opacity: drawSettings.highlighterOpacity,
+          }];
+          pushState(next, pages);
+          return next;
+        });
+        setCurrentPage(h.pageIndex);
+      }
+      return null;
+    });
   }
 
   function finishInkDraw() {
-    if (!inkDraw || inkDraw.points.length < 2) {
-      setInkDraw(null);
-      return;
-    }
-    pushState([...annotations, {
-      kind: "ink",
-      id: generateId(),
-      pageIndex: inkDraw.pageIndex,
-      points: inkDraw.points,
-      color: drawSettings.penColor,
-      opacity: 1,
-      strokeWidth: drawSettings.penSize,
-    }], pages);
-    setCurrentPage(inkDraw.pageIndex);
-    setInkDraw(null);
+    setInkDraw((draw) => {
+      if (!draw || draw.points.length < 2) return null;
+      
+      setAnnotations((a) => {
+        const next = [...a, {
+          kind: "ink" as const,
+          id: generateId(),
+          pageIndex: draw.pageIndex,
+          points: draw.points,
+          color: drawSettings.penColor,
+          opacity: 1,
+          strokeWidth: drawSettings.penSize,
+        }];
+        pushState(next, pages);
+        return next;
+      });
+      setCurrentPage(draw.pageIndex);
+      return null;
+    });
   }
 
   function eraseAnnotationAt(pageIndex: number, rx: number, ry: number) {
@@ -857,8 +872,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
     setEraserPreview(null);
     eraserSessionRef.current = null;
     if (!session || session.deletedIds.size === 0) return;
-    const nextAnnotations = session.baseAnnotations.filter((ann) => !session.deletedIds.has(ann.id));
-    pushState(nextAnnotations, pages);
+    setAnnotations(a => {
+      pushState(a, pages);
+      return a;
+    });
   }
 
   function handleSignatureApply(dataUrl: string, options: { color: string; strokeWidth: number }) {
@@ -918,7 +935,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
 
   function onDragEnd() {
     if (dragState) {
-      pushState(annotations, pages); // commit drag
+      setAnnotations(a => {
+        pushState(a, pages);
+        return a;
+      });
       setDragState(null);
     }
   }
@@ -965,7 +985,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
 
   function onResizeEnd() {
     if (resizeState) {
-      pushState(annotations, pages);
+      setAnnotations(a => {
+        pushState(a, pages);
+        return a;
+      });
       setResizeState(null);
     }
   }
@@ -999,7 +1022,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
 
   function onRotateEnd() {
     if (rotateState) {
-      pushState(annotations, pages);
+      setAnnotations(a => {
+        pushState(a, pages);
+        return a;
+      });
       setRotateState(null);
     }
   }
@@ -1041,6 +1067,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               tmpCanvas.height = viewport.height;
               const tmpCtx = tmpCanvas.getContext("2d");
               if (tmpCtx) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 await page.render({ canvasContext: tmpCtx, viewport } as any).promise;
               }
               imgCanvas = tmpCanvas;
@@ -1087,6 +1114,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           tmpCanvas.height = viewport.height;
           const tmpCtx = tmpCanvas.getContext("2d");
           if (tmpCtx) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await page.render({ canvasContext: tmpCtx, viewport } as any).promise;
           }
           imgCanvas = tmpCanvas;
@@ -2231,6 +2259,7 @@ function PdfPageRenderer({ pageData, className, style }: { pageData: PageData; c
         const canvas = canvasRef.current;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         renderTask = page.render({ canvasContext: ctx, viewport } as any);
         renderTask.promise.then(() => {
           if (isMounted) setRendered(true);

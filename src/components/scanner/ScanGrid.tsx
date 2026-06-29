@@ -151,14 +151,14 @@ export default function ScanGrid({
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             disabled={isProcessing}
-            className="col-span-full flex min-h-72 w-full flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center transition hover:border-slate-400 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="col-span-full flex min-h-[22rem] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-line bg-surface-strong px-6 py-12 text-center transition-all duration-300 hover:border-brand hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-surface text-brand shadow-sm ring-1 ring-line mb-4">
               <UploadIcon />
             </div>
-            <h3 className="mt-4 text-base font-semibold text-slate-950">No pages yet</h3>
-            <span className="mt-2 text-sm text-slate-500">Drop or choose files.</span>
-            <span className="mt-1 text-sm font-medium text-slate-400">Ctrl + V works too</span>
+            <h3 className="mt-4 text-xl font-bold text-foreground">No pages yet</h3>
+            <span className="mt-2 text-sm text-muted">Drop or choose files.</span>
+            <span className="mt-1 text-sm font-medium text-muted/60">Ctrl + V works too</span>
           </button>
         ) : (
           displayItems.map((item) => {
@@ -172,17 +172,17 @@ export default function ScanGrid({
                 onPointerMove={onReorderHandlePointerMove}
                 onPointerUp={onReorderHandlePointerEnd}
                 onPointerCancel={onReorderHandlePointerEnd}
-                className={`relative overflow-hidden rounded-lg border bg-white shadow-sm transition-colors duration-150 ${
+                className={`relative overflow-hidden rounded-2xl border bg-surface shadow-sm transition-all duration-300 ${
                   selected
                     ? mergeMode === "twoUp"
                       ? pdfIndex % 2 === 0
-                        ? "border-emerald-300 shadow-emerald-100"
-                        : "border-sky-300 shadow-sky-100"
-                      : "border-emerald-300 shadow-emerald-100"
-                    : "border-white"
+                        ? "border-emerald-400/50 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+                        : "border-sky-400/50 shadow-[0_0_20px_rgba(56,189,248,0.15)]"
+                      : "border-brand shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+                    : "border-line hover:shadow-md hover:-translate-y-1"
                 } ${selected ? "sm:cursor-grab sm:active:cursor-grabbing" : ""} ${
-                  draggingPdfId === item.id ? "z-10 opacity-80 shadow-lg ring-2 ring-slate-300" : "opacity-100"
-                } ${dragOverPdfId === item.id ? "ring-2 ring-emerald-300" : ""}`}
+                  draggingPdfId === item.id ? "z-10 opacity-90 shadow-2xl ring-2 ring-brand/50 scale-[1.02]" : "opacity-100"
+                } ${dragOverPdfId === item.id ? "ring-2 ring-brand" : ""}`}
                 style={selected && mergeMode === "twoUp" ? { boxShadow: "none" } : undefined}
                 data-pdf-card="true"
                 data-pdf-id={item.id}
@@ -213,32 +213,32 @@ export default function ScanGrid({
                 <div className="block w-full">
                   <img src={item.previewUrl} alt={item.name} className="aspect-4/3 w-full object-cover" />
                 </div>
-                <div className="space-y-3 p-4">
+                <div className="space-y-4 p-5">
                   <div>
-                    <h3 className="truncate font-semibold text-slate-900">{item.name}</h3>
+                    <h3 className="truncate font-bold text-foreground text-[15px]">{item.name}</h3>
                     {selected && mergeMode === "twoUp" ? (
                       <div className="mt-2 flex items-center gap-2">
                         <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          className={`inline-flex rounded-md px-2.5 py-0.5 text-[11px] font-bold ${
                             pdfIndex % 2 === 0
-                              ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
-                              : "border border-sky-200 bg-sky-50 text-sky-800"
+                              ? "border border-emerald-200/50 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                              : "border border-sky-200/50 bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400"
                           }`}
                         >
                           {pdfIndex % 2 === 0 ? "Front" : "Back"}
                         </span>
                       </div>
                     ) : null}
-                    <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
+                    <p className="mt-1 text-[10px] uppercase tracking-widest text-muted font-semibold">
                       {item.kind === "camera" ? "Camera Scan" : item.kind === "pdf-page" ? "PDF Page" : "Imported Image"}
                     </p>
                   </div>
-                  <div className="grid grid-cols-[1fr_1fr_40px_40px] gap-2">
+                  <div className="grid grid-cols-[1fr_1fr_44px_44px] gap-2">
                     <button
                       type="button"
                       onClick={() => moveScanPage(item.id, -1)}
                       disabled={!selected || pdfIndex <= 0}
-                      className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex h-11 items-center justify-center rounded-xl border border-line bg-surface px-2 text-xs font-bold text-foreground transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-30"
                       aria-label={`Move ${item.name} up`}
                     >
                       Up
@@ -247,7 +247,7 @@ export default function ScanGrid({
                       type="button"
                       onClick={() => moveScanPage(item.id, 1)}
                       disabled={!selected || pdfIndex === pdfOrderIds.length - 1}
-                      className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex h-11 items-center justify-center rounded-xl border border-line bg-surface px-2 text-xs font-bold text-foreground transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-30"
                       aria-label={`Move ${item.name} down`}
                     >
                       Down
@@ -255,7 +255,7 @@ export default function ScanGrid({
                     <button
                       type="button"
                       onClick={() => startCropForOne(item.id)}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-800 transition hover:bg-emerald-100"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
                       aria-label={`Edit ${item.name}`}
                       title="Edit image"
                     >
@@ -264,7 +264,7 @@ export default function ScanGrid({
                     <button
                       type="button"
                       onClick={() => removeItem(item.id)}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50 text-rose-600 transition hover:bg-rose-100"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
                       aria-label={`Delete ${item.name}`}
                       title="Delete"
                     >
