@@ -668,7 +668,29 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
     }
     if (options?.scrollIntoView) {
       window.requestAnimationFrame(() => {
-        pageRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+        const pageEl = pageRefs.current[index];
+        const scroller = scrollContainerRef.current;
+        const transformRef = (window as any).__transformRef;
+        if (pageEl && scroller && transformRef) {
+          const scrollerRect = scroller.getBoundingClientRect();
+          const scale = transformRef.state.scale;
+          
+          let targetY = -(pageEl.offsetTop * scale) + (scrollerRect.height / 2) - ((pageEl.offsetHeight * scale) / 2);
+          
+          const wrapper = transformRef.wrapperComponent;
+          const content = transformRef.contentComponent;
+          if (wrapper && content) {
+            const scaledHeight = content.offsetHeight * scale;
+            const overscroll = 0;
+            let b1Y = wrapper.offsetHeight - scaledHeight - overscroll;
+            let b2Y = overscroll;
+            const minY = Math.min(b1Y, b2Y);
+            const maxY = Math.max(b1Y, b2Y);
+            targetY = Math.max(minY, Math.min(maxY, targetY));
+          }
+          
+          transformRef.setTransform(transformRef.state.positionX, targetY, scale, 300);
+        }
       });
     }
   }
@@ -1278,7 +1300,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           : "cursor-default";
 
     return (
-      <section key={pageData.id} data-page-index={pageIndex} className="mx-auto shrink-0" style={{ width: "900px" }}>
+      <section key={pageData.id} data-page-index={pageIndex} className="mx-auto shrink-0 relative" style={{ width: "100%", maxWidth: "1200px" }}>
         <div
           ref={(el) => {
             pageRefs.current[pageIndex] = el;
@@ -1523,7 +1545,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   }
 
   return (
-    <div className="panel overflow-hidden flex flex-col">
+    <div className="panel h-[calc(100vh-140px)] min-h-[600px] overflow-hidden flex flex-col">
       <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
       <SignaturePad open={sigPadOpen} onApply={handleSignatureApply} onClose={() => setSigPadOpen(false)} />
 
@@ -1864,13 +1886,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo}
             />
 
-            <div
-              ref={scrollContainerRef}
-              onScroll={syncCurrentPageFromScroll}
-              className="min-h-0 flex-1 overflow-auto bg-slate-200/60"
-            >
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-200/60">
               {isLoading ? (
-                <div className="flex h-64 flex-col items-center justify-center gap-3">
+                <div className="flex flex-1 flex-col items-center justify-center gap-3">
                   <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600"></div>
                   <div className="text-sm font-medium text-slate-500">Loading PDF pages...</div>
                 </div>
@@ -1878,60 +1896,95 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
                 <>
                 <TransformWrapper
                   initialScale={1}
-                  minScale={0.25}
-                  maxScale={3}
-                  smooth={false}
+                  minScale={0.1}
+                  maxScale={5}
+                  smooth={true}
                   centerOnInit={true}
+                  centerZoomedOut={false}
                   wheel={{ disabled: true }}
-                  panning={{ disabled: activeTool !== "pan" }}
+                  panning={{ disabled: activeTool !== "pan", velocityDisabled: true }}
                   pinch={{ disabled: true }}
                   onTransform={(ref) => {
                     setZoomScale(ref.state.scale);
+                    syncCurrentPageFromScroll();
                   }}
                 >
                   {({ zoomIn, zoomOut, resetTransform, centerView, setTransform, instance }) => {
+                    (window as any).__transformRef = { ...instance, setTransform };
                     const zoomWrapRef = (node: HTMLDivElement | null) => {
                       if (!node) return;
                       const nodeExt = node as HTMLDivElement & { __zoomBound?: boolean };
                       if (nodeExt.__zoomBound) return;
                       nodeExt.__zoomBound = true;
+                      
+                      // We add custom CSS padding `py-[120px]` so we don't need artificial overscroll in the JS logic
+                      // and it naturally fixes the native Pan tool dragging bounds as well!
+                      
                       node.addEventListener("wheel", (e) => {
-                        if (!e.ctrlKey && !e.metaKey) return;
                         e.preventDefault();
                         e.stopPropagation();
                         
                         const { scale, positionX, positionY } = instance.state;
-                        const step = 0.08;
-                        const direction = e.deltaY < 0 ? 1 : -1;
-                        const newScale = Math.min(3, Math.max(0.25, scale + direction * step));
                         
-                        if (newScale !== scale) {
-                          const rect = node.getBoundingClientRect();
-                          const mouseX = e.clientX - rect.left;
-                          const mouseY = e.clientY - rect.top;
+                        if (e.ctrlKey || e.metaKey) {
+                          // Zooming
+                          const step = 0.05;
+                          const direction = e.deltaY < 0 ? 1 : -1;
+                          let newScale = Math.min(5, Math.max(0.1, scale * (1 + direction * step)));
                           
-                          const targetX = (mouseX - positionX) / scale;
-                          const targetY = (mouseY - positionY) / scale;
+                          if (newScale !== scale) {
+                            const rect = node.getBoundingClientRect();
+                            const mouseX = e.clientX - rect.left;
+                            const mouseY = e.clientY - rect.top;
+                            
+                            const targetX = (mouseX - positionX) / scale;
+                            const targetY = (mouseY - positionY) / scale;
+                            
+                            const newPositionX = mouseX - targetX * newScale;
+                            const newPositionY = mouseY - targetY * newScale;
+                            
+                            setTransform(newPositionX, newPositionY, newScale, 0);
+                          }
+                        } else {
+                          // Panning
+                          let newPositionX = positionX - e.deltaX;
+                          let newPositionY = positionY - e.deltaY;
                           
-                          const newPositionX = mouseX - targetX * newScale;
-                          const newPositionY = mouseY - targetY * newScale;
+                          const wrapper = instance.wrapperComponent;
+                          const content = instance.contentComponent;
+                          if (wrapper && content) {
+                            const scaledWidth = content.offsetWidth * scale;
+                            const scaledHeight = content.offsetHeight * scale;
+                            
+                            // Calculate boundaries. The CSS py-[120px] gives natural overscroll, so overscroll here is 0
+                            const overscroll = 0;
+                            
+                            let b1X = wrapper.offsetWidth - scaledWidth - overscroll;
+                            let b2X = overscroll;
+                            const minX = Math.min(b1X, b2X);
+                            const maxX = Math.max(b1X, b2X);
+                            
+                            let b1Y = wrapper.offsetHeight - scaledHeight - overscroll;
+                            let b2Y = overscroll;
+                            const minY = Math.min(b1Y, b2Y);
+                            const maxY = Math.max(b1Y, b2Y);
+                            
+                            newPositionX = Math.max(minX, Math.min(maxX, newPositionX));
+                            newPositionY = Math.max(minY, Math.min(maxY, newPositionY));
+                          }
                           
-                          setTransform(newPositionX, newPositionY, newScale, 0);
+                          setTransform(newPositionX, newPositionY, scale, 0);
                         }
                       }, { passive: false });
                     };
                     return (
-                      <div className="flex-1 relative w-full h-full min-h-0 flex flex-col">
-                        <div 
-                          ref={scrollContainerRef}
-                          onScroll={syncCurrentPageFromScroll}
-                          className="absolute inset-0 overflow-y-auto bg-slate-100 flex flex-col w-full"
-                        >
-                          <div className="flex-1 flex justify-center w-full min-h-max" ref={zoomWrapRef}>
-                            <TransformComponent wrapperClass="w-full h-full" contentClass="w-full flex flex-col gap-8 pb-8 pt-6 px-4 items-center">
+                      <div className="flex-1 relative w-full h-full min-h-0 flex flex-col overflow-hidden bg-slate-200/60" ref={scrollContainerRef}>
+                        <div className="absolute inset-0 flex flex-col w-full h-full outline-none" ref={zoomWrapRef}>
+                          <TransformComponent wrapperClass="w-full h-full outline-none" contentClass="w-full transition-none">
+                            <div className="w-full flex flex-col items-center gap-8" style={{ padding: "120px 16px" }}>
                               {pages.map((pg, index) => renderWorkspacePage(pg, index))}
-                            </TransformComponent>
-                          </div>
+                            </div>
+                          </TransformComponent>
                         </div>
 
                           {/* Floating page indicator */}
@@ -2257,6 +2310,9 @@ function PdfPageRenderer({ pageData, className, style }: { pageData: PageData; c
         if (!isMounted || !canvasRef.current) return;
         const viewport = page.getViewport({ scale: 2.0 });
         const canvas = canvasRef.current;
+        // Fix: Update canvas native resolution to match the 2.0 scale viewport so it doesn't crop!
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
