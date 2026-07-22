@@ -3,11 +3,13 @@
 import React from "react";
 import { usePasteFile } from "../../hooks/usePasteFile";
 import { HandIcon, TrashIcon } from "./icons";
-import type { PdfMergeItem } from "./types";
+import type { MergeMode, PdfMergeItem } from "./types";
 
 type Props = {
   pdfFiles: PdfMergeItem[];
   isProcessing: boolean;
+  mergeMode?: MergeMode;
+  setMergeMode?: (mode: MergeMode) => void;
   onAddPdfs: (files?: FileList | null) => void;
   onAddImages: (files?: FileList | null) => void;
   onMergePdfs: () => void | Promise<void>;
@@ -30,6 +32,8 @@ function formatFileSize(bytes: number) {
 export default function PdfMergePanel({
   pdfFiles,
   isProcessing,
+  mergeMode = "single",
+  setMergeMode,
   onAddPdfs,
   onAddImages,
   onMergePdfs,
@@ -255,13 +259,55 @@ export default function PdfMergePanel({
             <p className="mt-1 text-xl font-semibold text-slate-950">{totalPages || "-"}</p>
           </div>
         </div>
+
+        {setMergeMode && (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <p className="text-sm font-semibold text-slate-950">Page Layout</p>
+            <div className="mt-2.5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setMergeMode("single")}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold text-left transition ${
+                  mergeMode === "single"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                1 per page (Standard)
+              </button>
+              <button
+                type="button"
+                onClick={() => setMergeMode("firstTwoUp")}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold text-left transition ${
+                  mergeMode === "firstTwoUp"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                First 2-up, then 1-up
+              </button>
+              <button
+                type="button"
+                onClick={() => setMergeMode("twoUp")}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold text-left transition ${
+                  mergeMode === "twoUp"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                2 per Page (All)
+              </button>
+            </div>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => void onMergePdfs()}
-          disabled={pdfFiles.length < 2 || isProcessing}
+          disabled={pdfFiles.length < 1 || isProcessing}
           className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
         >
-          Merge PDFs
+          {isProcessing ? "Building PDF..." : "Merge PDFs"}
         </button>
       </aside>
     </section>

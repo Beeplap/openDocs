@@ -41,7 +41,7 @@ export default function ExportPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-base font-semibold text-slate-950">Layout</h3>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setMergeMode("single")}
@@ -55,6 +55,17 @@ export default function ExportPanel({
               </button>
               <button
                 type="button"
+                onClick={() => setMergeMode("firstTwoUp")}
+                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                  mergeMode === "firstTwoUp"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                First 2-up, then 1-up
+              </button>
+              <button
+                type="button"
                 onClick={() => setMergeMode("twoUp")}
                 className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
                   mergeMode === "twoUp"
@@ -62,7 +73,7 @@ export default function ExportPanel({
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
-                2 per Page
+                2 per Page (All)
               </button>
             </div>
           </div>
@@ -93,12 +104,21 @@ export default function ExportPanel({
                 length:
                   mergeMode === "twoUp"
                     ? Math.min(Math.ceil(pdfOrderItems.length / 2), 3)
-                    : Math.min(pdfOrderItems.length, 3),
+                    : mergeMode === "firstTwoUp"
+                      ? Math.min(pdfOrderItems.length <= 2 ? 1 : 1 + (pdfOrderItems.length - 2), 3)
+                      : Math.min(pdfOrderItems.length, 3),
               }).map((_, pageIdx) => {
                 const pageNumber = pageIdx + 1;
                 const mergedUrl = mergePreviewUrls[pageIdx] ?? null;
-                const topItem = mergeMode === "twoUp" ? previewOrderedItems[pageIdx * 2] : previewOrderedItems[pageIdx];
-                const bottomItem = mergeMode === "twoUp" ? previewOrderedItems[pageIdx * 2 + 1] : null;
+                const isFirstPageTwoUp = mergeMode === "firstTwoUp" && pageIdx === 0;
+                const isAllTwoUp = mergeMode === "twoUp";
+                const isTwoUpSlot = isAllTwoUp || isFirstPageTwoUp;
+                const topItem = isTwoUpSlot
+                  ? previewOrderedItems[pageIdx * 2]
+                  : mergeMode === "firstTwoUp"
+                    ? previewOrderedItems[pageIdx + 1]
+                    : previewOrderedItems[pageIdx];
+                const bottomItem = isTwoUpSlot ? previewOrderedItems[pageIdx * 2 + 1] : null;
 
                 return (
                   <div key={pageNumber} className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-2">

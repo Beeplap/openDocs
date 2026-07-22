@@ -1048,6 +1048,8 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
               onRemovePdf={removePdfFile}
               onMovePdf={movePdfFile}
               onReorderPdf={reorderPdfFile}
+              mergeMode={mergeMode}
+              setMergeMode={setMergeMode}
             />
           ) : workspaceMode === "advanced" ? (
             <AdvancedPdfEditor onStatusMessage={setStatusMessage} statusMessage={statusMessage} initialIntent={activeEditorIntent ?? editorIntent} />
@@ -1089,7 +1091,7 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
 
 async function renderEditedPdfPages(
   items: ScanItem[],
-  mergeMode: "single" | "twoUp",
+  mergeMode: MergeMode,
   width: number
 ) {
   const pages: Blob[] = [];
@@ -1113,6 +1115,57 @@ async function renderEditedPdfPages(
 
       pages.push(await canvasToBlob(canvas));
     }
+    return pages;
+  }
+
+  if (mergeMode === "firstTwoUp") {
+    const height = Math.round(width / A4_RATIO);
+    if (items.length > 0) {
+      const canvas = createA4Canvas(width, height);
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        drawPageBackground(ctx, width, height);
+        const marginX = width * 0.07;
+        const marginY = height * 0.055;
+        const gap = height * 0.035;
+        const frameW = width - marginX * 2;
+        const frameH = (height - marginY * 2 - gap) / 2;
+
+        if (items[0]) {
+          await drawEditedItem(ctx, items[0], { x: marginX, y: marginY, w: frameW, h: frameH });
+        }
+        if (items[1]) {
+          await drawEditedItem(ctx, items[1], {
+            x: marginX,
+            y: marginY + frameH + gap,
+            w: frameW,
+            h: frameH,
+          });
+        }
+        pages.push(await canvasToBlob(canvas));
+      }
+    }
+
+    for (let i = 2; i < items.length; i++) {
+      const item = items[i];
+      const pageRatio = await getEditedItemAspectRatio(item);
+      const canvasWidth = pageRatio >= 1 ? width : Math.round(width * pageRatio);
+      const canvasHeight = pageRatio >= 1 ? Math.round(width / pageRatio) : width;
+      const canvas = createA4Canvas(canvasWidth, canvasHeight);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+
+      drawPageBackground(ctx, canvasWidth, canvasHeight);
+      await drawEditedItem(ctx, item, {
+        x: 0,
+        y: 0,
+        w: canvasWidth,
+        h: canvasHeight,
+      });
+
+      pages.push(await canvasToBlob(canvas));
+    }
+
     return pages;
   }
 
@@ -1175,7 +1228,7 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function getEditorFrame(mergeMode: "single" | "twoUp", slotIndex: number): EditorFrame {
+function getEditorFrame(mergeMode: MergeMode, slotIndex: number): EditorFrame {
   if (mergeMode === "single") {
     return { x: 0.08, y: 0.065, w: 0.84, h: 0.87 };
   }
@@ -1208,7 +1261,7 @@ function getDocumentCropSize(points: [CropPoint, CropPoint, CropPoint, CropPoint
 function getEditorBox(
   item: ScanItem,
   imageSize: ImageSize,
-  mergeMode: "single" | "twoUp",
+  mergeMode: MergeMode,
   slotIndex: number
 ): EditorBox {
   const frame = getEditorFrame(mergeMode, slotIndex);
