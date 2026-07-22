@@ -1020,29 +1020,22 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
             </section>
           ) : workspaceMode === "pdf" ? (
             <PdfMergePanel
-              pdfFiles={pdfFiles}
+              items={items}
               isProcessing={isProcessing}
-              onAddPdfs={(files) => {
-                if (files && files.length > 0) {
-                  void handlePickedPdfFiles(files);
-                  return;
-                }
-                pdfInputRef.current?.click();
-              }}
-              onAddImages={(files) => {
-                if (files && files.length > 0) {
-                  handlePickedImageFiles(files);
-                  return;
-                }
-                setWorkspaceMode("scan");
-                photoInputRef.current?.click();
-              }}
-              onMergePdfs={exportMergedPdfs}
-              onRemovePdf={removePdfFile}
-              onMovePdf={movePdfFile}
-              onReorderPdf={reorderPdfFile}
               mergeMode={mergeMode}
               setMergeMode={setMergeMode}
+              onAddPages={(files) => {
+                if (files && files.length > 0) {
+                  void handlePickedFiles(files);
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
+              onMergePdfs={exportPdf}
+              onRemoveItem={removeItem}
+              onMoveItem={moveScanPage}
+              onReorderItem={(_id, overId) => handlePdfDragOver(overId)}
+              startCropForOne={startCropForOne}
             />
           ) : workspaceMode === "advanced" ? (
             <AdvancedPdfEditor onStatusMessage={setStatusMessage} statusMessage={statusMessage} initialIntent={activeEditorIntent ?? editorIntent} />

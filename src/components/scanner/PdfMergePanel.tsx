@@ -2,58 +2,47 @@
 
 import React from "react";
 import { usePasteFile } from "../../hooks/usePasteFile";
-import { HandIcon, TrashIcon } from "./icons";
-import type { MergeMode, PdfMergeItem } from "./types";
+import { EditIcon, HandIcon, TrashIcon, UploadIcon } from "./icons";
+import type { MergeMode, ScanItem } from "./types";
 
 type Props = {
-  pdfFiles: PdfMergeItem[];
+  items: ScanItem[];
   isProcessing: boolean;
   mergeMode?: MergeMode;
   setMergeMode?: (mode: MergeMode) => void;
-  onAddPdfs: (files?: FileList | null) => void;
-  onAddImages: (files?: FileList | null) => void;
+  onAddPages: (files?: FileList | null) => void;
   onMergePdfs: () => void | Promise<void>;
-  onRemovePdf: (id: string) => void;
-  onMovePdf: (id: string, direction: -1 | 1) => void;
-  onReorderPdf: (id: string, overId: string) => void;
+  onRemoveItem: (id: string) => void;
+  onMoveItem: (id: string, direction: -1 | 1) => void;
+  onReorderItem: (id: string, overId: string) => void;
+  startCropForOne: (id: string) => void;
 };
 
-const IMAGE_EXTENSION_PATTERN = /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/i;
+const IMAGE_OR_PDF_PATTERN = /\.(avif|bmp|gif|heic|heif|jpe?g|pdf|png|svg|tiff?|webp)$/i;
 
-function isImageFile(file: File) {
-  return file.type.startsWith("image/") || IMAGE_EXTENSION_PATTERN.test(file.name);
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function isValidPageFile(file: File) {
+  return file.type === "application/pdf" || file.type.startsWith("image/") || IMAGE_OR_PDF_PATTERN.test(file.name);
 }
 
 export default function PdfMergePanel({
-  pdfFiles,
+  items,
   isProcessing,
   mergeMode = "single",
   setMergeMode,
-  onAddPdfs,
-  onAddImages,
+  onAddPages,
   onMergePdfs,
-  onRemovePdf,
-  onMovePdf,
-  onReorderPdf,
+  onRemoveItem,
+  onMoveItem,
+  onReorderItem,
+  startCropForOne,
 }: Props) {
-  const totalPages = pdfFiles.reduce((sum, item) => sum + (item.pageCount ?? 0), 0);
   const dragPdfIdRef = React.useRef<string | null>(null);
   const [draggingPdfId, setDraggingPdfId] = React.useState<string | null>(null);
   const [dragOverPdfId, setDragOverPdfId] = React.useState<string | null>(null);
 
-  usePasteFile((files, fileList) => {
+  usePasteFile((_files, fileList) => {
     if (isProcessing) return;
-    const hasImage = files.some(isImageFile);
-    if (hasImage) {
-      onAddImages(fileList);
-      return;
-    }
-    onAddPdfs(fileList);
+    onAddPages(fileList);
   }, isProcessing);
 
   function startDrag(id: string, e: React.PointerEvent<HTMLElement>) {
@@ -80,7 +69,7 @@ export default function PdfMergePanel({
     if (!overId || overId === draggedId) return;
 
     setDragOverPdfId(overId);
-    onReorderPdf(draggedId, overId);
+    onReorderItem(draggedId, overId);
   }
 
   function endDrag(e: React.PointerEvent<HTMLElement>) {
@@ -108,13 +97,7 @@ export default function PdfMergePanel({
     e.preventDefault();
     e.stopPropagation();
     if (isProcessing) return;
-    const files = Array.from(e.dataTransfer.files);
-    const hasImage = files.some(isImageFile);
-    if (hasImage) {
-      onAddImages(e.dataTransfer.files);
-      return;
-    }
-    onAddPdfs(e.dataTransfer.files);
+    onAddPages(e.dataTransfer.files);
   }
 
   return (
@@ -122,46 +105,40 @@ export default function PdfMergePanel({
       <div className="panel p-5">
         <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-slate-950">Merge PDFs</h2>
+            <h2 className="text-xl font-semibold text-slate-950">Merge PDFs & Scans</h2>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => onAddPdfs()}
+              onClick={() => onAddPages()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
-              Add PDF
-            </button>
-            <button
-              type="button"
-              onClick={() => onAddImages()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-              className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-            >
-              Add image
+              <UploadIcon />
+              Add page
             </button>
           </div>
         </div>
 
         <div className="mt-4">
-          {pdfFiles.length === 0 ? (
+          {items.length === 0 ? (
             <button
               type="button"
-              onClick={() => onAddPdfs()}
+              onClick={() => onAddPages()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
               className="flex min-h-72 w-full flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center transition hover:border-slate-400 hover:bg-white"
             >
-              <span className="text-base font-semibold text-slate-950">Drop or choose PDFs</span>
+              <span className="text-base font-semibold text-slate-950">Drop or choose PDFs or images</span>
               <span className="mt-1 text-sm font-medium text-slate-400">Ctrl + V works too</span>
-              <span className="mt-2 text-sm text-slate-500">Use Add image to build a PDF from images with crop, edit, reorder, and two-up tools.</span>
+              <span className="mt-2 text-sm text-slate-500">
+                Add PDFs or images to crop, edit, reorder, and merge into a clean document.
+              </span>
             </button>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {pdfFiles.map((item, index) => (
+              {items.map((item, index) => (
                 <article
                   key={item.id}
                   data-merge-pdf-card="true"
@@ -170,71 +147,62 @@ export default function PdfMergePanel({
                   onPointerMove={moveDrag}
                   onPointerUp={endDrag}
                   onPointerCancel={endDrag}
-                  className={`overflow-hidden rounded-lg border bg-white shadow-sm transition ${
-                    dragOverPdfId === item.id ? "border-emerald-400 ring-2 ring-emerald-100" : "border-slate-200"
+                  className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${
+                    dragOverPdfId === item.id ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200"
                   } ${draggingPdfId === item.id ? "opacity-75 sm:cursor-grabbing" : "sm:cursor-grab"}`}
                 >
                   <div className="relative bg-slate-100">
-                    <div className="absolute left-2 top-2 z-10 rounded-md bg-slate-950 px-2 py-1 text-xs font-semibold text-white">
-                      PDF {index + 1}
+                    {/* Page Number Badge */}
+                    <div className="absolute left-2.5 top-2.5 z-10 flex h-7 min-w-7 items-center justify-center rounded-lg bg-slate-950/90 px-2 text-xs font-bold text-white shadow-md">
+                      {index + 1}
                     </div>
+
+                    {/* Top-Right Pencil Edit/Crop Button */}
                     <button
                       type="button"
-                      onPointerDown={(e) => startDrag(item.id, e)}
-                      onPointerMove={moveDrag}
-                      onPointerUp={endDrag}
-                      onPointerCancel={endDrag}
-                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 sm:hidden"
-                      style={{ cursor: draggingPdfId === item.id ? "grabbing" : "grab", touchAction: "none" }}
-                      aria-label={`Drag ${item.name} to reorder`}
-                      title="Drag to reorder"
+                      onClick={() => startCropForOne(item.id)}
+                      className="absolute right-2.5 top-2.5 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/95 text-slate-800 shadow-md backdrop-blur transition hover:bg-slate-100 hover:scale-105"
+                      title="Crop & Edit page"
+                      aria-label={`Crop page ${index + 1}`}
                     >
-                      <HandIcon />
+                      <EditIcon />
                     </button>
-                    {item.previewUrl ? (
-                      <img src={item.previewUrl} alt={`First page preview of ${item.name}`} className="aspect-4/5 w-full bg-white object-contain p-3" />
-                    ) : item.previewFailed ? (
-                      <div className="grid aspect-4/5 w-full place-items-center p-6 text-center text-sm text-slate-500">
-                        Preview unavailable
-                      </div>
-                    ) : (
-                      <div className="grid aspect-4/5 w-full place-items-center p-6 text-center text-sm text-slate-500">
-                        Rendering preview...
-                      </div>
-                    )}
+
+                    <img
+                      src={item.previewUrl}
+                      alt={item.name}
+                      className="aspect-3/4 w-full bg-white object-cover"
+                    />
                   </div>
                   <div className="space-y-3 p-4">
                     <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-slate-950">{item.name}</h3>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {item.pageCount === null ? "Reading pages" : `${item.pageCount} page${item.pageCount === 1 ? "" : "s"}`} / {formatFileSize(item.size)}
-                    </p>
+                      <h3 className="truncate text-sm font-semibold text-slate-950">{item.name}</h3>
+                      <p className="mt-0.5 text-xs font-medium text-slate-500">
+                        {item.kind === "pdf-page" ? "PDF Page" : item.kind === "camera" ? "Camera Scan" : "Imported Image"}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => onMovePdf(item.id, -1)}
+                        onClick={() => onMoveItem(item.id, -1)}
                         disabled={index === 0}
                         className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label={`Move ${item.name} up`}
                       >
                         Up
                       </button>
                       <button
                         type="button"
-                        onClick={() => onMovePdf(item.id, 1)}
-                        disabled={index === pdfFiles.length - 1}
+                        onClick={() => onMoveItem(item.id, 1)}
+                        disabled={index === items.length - 1}
                         className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label={`Move ${item.name} down`}
                       >
                         Down
                       </button>
                       <button
                         type="button"
-                        onClick={() => onRemovePdf(item.id)}
+                        onClick={() => onRemoveItem(item.id)}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-rose-700 transition hover:bg-rose-100"
-                        aria-label={`Remove ${item.name}`}
-                        title="Remove"
+                        title="Remove page"
                       >
                         <TrashIcon />
                       </button>
@@ -251,12 +219,14 @@ export default function PdfMergePanel({
         <p className="text-base font-semibold text-slate-950">Output</p>
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-slate-500">Files</p>
-            <p className="mt-1 text-xl font-semibold text-slate-950">{pdfFiles.length}</p>
+            <p className="text-slate-500">Pages</p>
+            <p className="mt-1 text-xl font-semibold text-slate-950">{items.length}</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-slate-500">Pages</p>
-            <p className="mt-1 text-xl font-semibold text-slate-950">{totalPages || "-"}</p>
+            <p className="text-slate-500">Layout Mode</p>
+            <p className="mt-1 text-xs font-bold text-slate-950 uppercase">
+              {mergeMode === "firstTwoUp" ? "First 2-up" : mergeMode === "twoUp" ? "2-up All" : "1-up"}
+            </p>
           </div>
         </div>
 
@@ -304,7 +274,7 @@ export default function PdfMergePanel({
         <button
           type="button"
           onClick={() => void onMergePdfs()}
-          disabled={pdfFiles.length < 1 || isProcessing}
+          disabled={items.length < 1 || isProcessing}
           className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
         >
           {isProcessing ? "Building PDF..." : "Merge PDFs"}
