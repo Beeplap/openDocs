@@ -8,13 +8,15 @@ import ThemeToggle from "./ThemeToggle";
 import type { ToolNavGroup, ToolSectionId } from "../lib/siteRoutes";
 import { getRoute, toolNavGroups } from "../lib/siteRoutes";
 
-const sectionTone = {
-  scan: "bg-blue-600",
-  organize: "bg-violet-600",
-  convert: "bg-emerald-600",
-  compress: "bg-amber-600",
-  edit: "bg-cyan-600",
-  secure: "bg-rose-600",
+import { ToolIcon } from "./ToolNavIcons";
+
+const sectionTone: Record<ToolSectionId, string> = {
+  scan: "bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20",
+  organize: "bg-gradient-to-br from-violet-500 to-purple-600 shadow-violet-500/20",
+  convert: "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20",
+  compress: "bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/20",
+  edit: "bg-gradient-to-br from-cyan-500 to-blue-600 shadow-cyan-500/20",
+  secure: "bg-gradient-to-br from-rose-500 to-red-600 shadow-rose-500/20",
 };
 
 const primaryNav = [
@@ -239,20 +241,15 @@ export default function ToolMegaMenu() {
                           href={route.path}
                           onClick={() => setDrawerMode(null)}
                           data-active={current}
-                          className="tool-link drawer-link relative flex h-12 w-full items-center gap-3 rounded-md px-2.5 transition"
+                          className="tool-link drawer-link group relative flex h-12 w-full items-center gap-3 rounded-lg px-2.5 transition hover:bg-slate-100 dark:hover:bg-zinc-800/80"
                         >
                           <span
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[11px] font-bold text-white ${
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-xs transition-transform duration-200 group-hover:scale-105 ${
                               sectionTone[group.id]
                             }`}
                             aria-hidden="true"
                           >
-                            {route.title
-                              .split(" ")
-                              .slice(0, 2)
-                              .map((word) => word[0])
-                              .join("")
-                              .toUpperCase()}
+                            <ToolIcon path={route.path} className="h-4 w-4" />
                           </span>
                           <span className="tool-link-label text-sm font-medium">{route.title}</span>
                           <span className="tool-tooltip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-[60] hidden w-72 -translate-x-1/2 rounded-md px-3 py-2 text-center text-xs font-medium leading-5 shadow-lg">

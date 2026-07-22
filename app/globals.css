@@ -166,10 +166,9 @@ textarea {
 }
 
 .mega-drawer {
-  background: var(--surface-strong);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: var(--surface);
   border-color: var(--line);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.25), 0 8px 16px -4px rgba(0, 0, 0, 0.1);
   overscroll-behavior: contain;
   scrollbar-width: thin;
   touch-action: pan-y;
