@@ -39,6 +39,8 @@ type Props = {
   selectedAnnotationId: string | null;
   onDeleteAnnotation: (id: string) => void;
   onPageChange?: (pageIndex: number) => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
   undo?: () => void;
@@ -95,6 +97,8 @@ export default function AdvancedToolbar({
   pageCount,
   currentPage,
   onPageChange,
+  isFullscreen = false,
+  onToggleFullscreen,
   annotations,
   onDeleteAnnotation,
   selectedAnnotationId,
@@ -315,10 +319,34 @@ export default function AdvancedToolbar({
             type="button"
             onClick={onNewPdf}
             title="Start a new PDF"
-            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             New PDF
           </button>
+          {onToggleFullscreen && (
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              title={isFullscreen ? "Minimize viewport to normal view" : "Fullscreen page viewport"}
+              className={`flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 text-sm font-semibold transition ${
+                isFullscreen
+                  ? "bg-amber-500 text-white hover:bg-amber-600"
+                  : "bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              {isFullscreen ? (
+                <>
+                  <MinimizeIcon className="h-4 w-4" />
+                  Minimize
+                </>
+              ) : (
+                <>
+                  <MaximizeIcon className="h-4 w-4" />
+                  Fullscreen
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -545,6 +573,28 @@ function ChevronRightIcon() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
+function MaximizeIcon(props: IconProps) {
+  return (
+    <svg className={props.className || "h-4 w-4"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+function MinimizeIcon(props: IconProps) {
+  return (
+    <svg className={props.className || "h-4 w-4"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+      <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+      <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+      <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
     </svg>
   );
 }

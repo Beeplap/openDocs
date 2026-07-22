@@ -186,6 +186,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   const [exportFilename, setExportFilename] = useState("document-edited.pdf");
   const [zoomScale, setZoomScale] = useState(1);
   const [transientCrop, setTransientCrop] = useState<PageCrop>({ top: 0, right: 0, bottom: 0, left: 0 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const thumbnailContainerRef = useRef<HTMLDivElement>(null);
 
   
@@ -1641,7 +1642,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   }
 
   return (
-    <div className="panel h-[calc(100vh-140px)] min-h-[600px] overflow-hidden flex flex-col">
+    <div className={isFullscreen ? "fixed inset-0 z-[100] w-screen h-screen bg-slate-100 flex flex-col overflow-hidden" : "panel h-[calc(100vh-140px)] min-h-[600px] overflow-hidden flex flex-col"}>
       <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
       <SignaturePad open={sigPadOpen} onApply={handleSignatureApply} onClose={() => setSigPadOpen(false)} />
 
@@ -1975,6 +1976,8 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               hasPages={pages.length > 0}
               pageCount={pages.length} currentPage={currentPage}
               onPageChange={(idx) => selectPage(idx, { scrollIntoView: true })}
+              isFullscreen={isFullscreen}
+              onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
               annotations={annotations} onDeleteAnnotation={deleteAnnotation}
               onUpdateAnnotation={(id, updates) => {
                 updateAnnotation(id, updates, true);
