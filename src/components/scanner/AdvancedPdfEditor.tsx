@@ -1642,7 +1642,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   }
 
   return (
-    <div className={isFullscreen ? "fixed inset-0 z-[100] w-screen h-screen bg-slate-100 flex flex-col overflow-hidden" : "panel h-[calc(100vh-140px)] min-h-[600px] overflow-hidden flex flex-col"}>
+    <div className={isFullscreen ? "fixed inset-0 z-[100] w-screen h-screen bg-slate-100 flex flex-col overflow-hidden" : "panel h-[calc(100vh-80px)] min-h-[600px] overflow-hidden flex flex-col"}>
       <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
       <SignaturePad open={sigPadOpen} onApply={handleSignatureApply} onClose={() => setSigPadOpen(false)} />
 
