@@ -192,6 +192,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollSyncFrameRef = useRef<number | null>(null);
+  const isProgrammaticScrollRef = useRef<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadModeRef = useRef<"replace" | "append">("replace");
   const fileActionRef = useRef<PdfPickerAction>("edit");
@@ -367,6 +368,12 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
         setHighlightDraw(null);
         setInkDraw(null);
         setEraserPreview(null);
+      } else if (e.key === "PageDown") {
+        e.preventDefault();
+        selectPage(Math.min(pages.length - 1, currentPage + 1), { scrollIntoView: true });
+      } else if (e.key === "PageUp") {
+        e.preventDefault();
+        selectPage(Math.max(0, currentPage - 1), { scrollIntoView: true });
       } else if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedId) {
           e.preventDefault();
@@ -378,7 +385,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undo, redo, selectedId, copiedAnnotation, annotations, pages, pushState, copyAnnotation, pasteAnnotation]);
+  }, [undo, redo, selectedId, copiedAnnotation, annotations, pages, pushState, copyAnnotation, pasteAnnotation, currentPage]);
 
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
@@ -410,6 +417,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   useEffect(() => {
     if (pages.length === 0 || !scrollContainerRef.current) return;
     const observer = new IntersectionObserver((entries) => {
+      if (isProgrammaticScrollRef.current) return;
       const visible = entries.find(e => e.isIntersecting);
       if (visible) {
         const idx = parseInt((visible.target as HTMLElement).dataset.pageIndex || "-1", 10);
@@ -712,36 +720,45 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
       commitAnnotationEdits();
     }
     if (options?.scrollIntoView) {
+      isProgrammaticScrollRef.current = true;
       window.requestAnimationFrame(() => {
         const pageEl = pageRefs.current[index];
         const scroller = scrollContainerRef.current;
         const transformRef = (window as any).__transformRef;
-        if (pageEl && scroller && transformRef) {
-          const scrollerRect = scroller.getBoundingClientRect();
-          const scale = transformRef.state.scale;
-          
-          let targetY = -(pageEl.offsetTop * scale) + (scrollerRect.height / 2) - ((pageEl.offsetHeight * scale) / 2);
-          
-          const wrapper = transformRef.wrapperComponent;
-          const content = transformRef.contentComponent;
-          if (wrapper && content) {
-            const scaledHeight = content.offsetHeight * scale;
-            const overscroll = 0;
-            let b1Y = wrapper.offsetHeight - scaledHeight - overscroll;
-            let b2Y = overscroll;
-            const minY = Math.min(b1Y, b2Y);
-            const maxY = Math.max(b1Y, b2Y);
-            targetY = Math.max(minY, Math.min(maxY, targetY));
+        if (pageEl && scroller) {
+          if (transformRef && typeof transformRef.setTransform === "function") {
+            const scrollerRect = scroller.getBoundingClientRect();
+            const scale = transformRef.state?.scale || 1;
+            
+            let targetY = -(pageEl.offsetTop * scale) + (scrollerRect.height / 2) - ((pageEl.offsetHeight * scale) / 2);
+            
+            const wrapper = transformRef.wrapperComponent;
+            const content = transformRef.contentComponent;
+            if (wrapper && content) {
+              const scaledHeight = content.offsetHeight * scale;
+              const overscroll = 0;
+              let b1Y = wrapper.offsetHeight - scaledHeight - overscroll;
+              let b2Y = overscroll;
+              const minY = Math.min(b1Y, b2Y);
+              const maxY = Math.max(b1Y, b2Y);
+              targetY = Math.max(minY, Math.min(maxY, targetY));
+            }
+            
+            transformRef.setTransform(transformRef.state?.positionX || 0, targetY, scale, 300);
+          } else {
+            pageEl.scrollIntoView({ behavior: "smooth", block: "center" });
           }
-          
-          transformRef.setTransform(transformRef.state.positionX, targetY, scale, 300);
         }
+
+        setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+        }, 500);
       });
     }
   }
 
   function syncCurrentPageFromScroll() {
-    if (scrollSyncFrameRef.current !== null) return;
+    if (scrollSyncFrameRef.current !== null || isProgrammaticScrollRef.current) return;
     scrollSyncFrameRef.current = window.requestAnimationFrame(() => {
       scrollSyncFrameRef.current = null;
       const scroller = scrollContainerRef.current;
@@ -1946,6 +1963,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               onNewPdf={() => openPdfPicker("replace")}
               hasPages={pages.length > 0}
               pageCount={pages.length} currentPage={currentPage}
+              onPageChange={(idx) => selectPage(idx, { scrollIntoView: true })}
               annotations={annotations} onDeleteAnnotation={deleteAnnotation}
               onUpdateAnnotation={(id, updates) => {
                 updateAnnotation(id, updates, true);

@@ -36,8 +36,9 @@ type Props = {
   pageCount: number;
   currentPage: number;
   annotations: AdvancedAnnotation[];
-  onDeleteAnnotation: (id: string) => void;
   selectedAnnotationId: string | null;
+  onDeleteAnnotation: (id: string) => void;
+  onPageChange?: (pageIndex: number) => void;
   canUndo?: boolean;
   canRedo?: boolean;
   undo?: () => void;
@@ -92,6 +93,8 @@ export default function AdvancedToolbar({
   isExporting,
   hasPages,
   pageCount,
+  currentPage,
+  onPageChange,
   annotations,
   onDeleteAnnotation,
   selectedAnnotationId,
@@ -140,6 +143,34 @@ export default function AdvancedToolbar({
             />
           ))}
         </div>
+
+        {hasPages && (
+          <div className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-700">
+            <button
+              type="button"
+              onClick={() => onPageChange?.(Math.max(0, currentPage - 1))}
+              disabled={currentPage <= 0}
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-600 transition hover:bg-white hover:shadow-xs disabled:opacity-30"
+              title="Previous Page"
+              aria-label="Previous Page"
+            >
+              <ChevronLeftIcon />
+            </button>
+            <span className="min-w-12 text-center text-slate-900">
+              {currentPage + 1} / {pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => onPageChange?.(Math.min(pageCount - 1, currentPage + 1))}
+              disabled={currentPage >= pageCount - 1}
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-600 transition hover:bg-white hover:shadow-xs disabled:opacity-30"
+              title="Next Page"
+              aria-label="Next Page"
+            >
+              <ChevronRightIcon />
+            </button>
+          </div>
+        )}
 
         {activeTool === "draw" && (
           <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
@@ -499,5 +530,21 @@ function CropIcon(props: IconProps) {
       <path d="M6 2v14a2 2 0 0 0 2 2h14" />
       <path d="M18 22V8a2 2 0 0 0-2-2H2" />
     </SvgRoot>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m9 18 6-6-6-6" />
+    </svg>
   );
 }
