@@ -189,6 +189,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   const thumbnailContainerRef = useRef<HTMLDivElement>(null);
 
   
+  const sectionRefs = useRef<Record<number, HTMLElement | null>>({});
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollSyncFrameRef = useRef<number | null>(null);
@@ -722,15 +723,17 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
     if (options?.scrollIntoView) {
       isProgrammaticScrollRef.current = true;
       window.requestAnimationFrame(() => {
-        const pageEl = pageRefs.current[index];
+        const sectionEl = sectionRefs.current[index] || pageRefs.current[index]?.parentElement || pageRefs.current[index];
         const scroller = scrollContainerRef.current;
         const transformRef = (window as any).__transformRef;
-        if (pageEl && scroller) {
+        if (sectionEl && scroller) {
           if (transformRef && typeof transformRef.setTransform === "function") {
             const scrollerRect = scroller.getBoundingClientRect();
             const scale = transformRef.state?.scale || 1;
             
-            let targetY = -(pageEl.offsetTop * scale) + (scrollerRect.height / 2) - ((pageEl.offsetHeight * scale) / 2);
+            const offsetTop = sectionEl.offsetTop;
+            const offsetHeight = sectionEl.offsetHeight;
+            let targetY = -(offsetTop * scale) + (scrollerRect.height / 2) - ((offsetHeight * scale) / 2);
             
             const wrapper = transformRef.wrapperComponent;
             const content = transformRef.contentComponent;
@@ -746,7 +749,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
             
             transformRef.setTransform(transformRef.state?.positionX || 0, targetY, scale, 300);
           } else {
-            pageEl.scrollIntoView({ behavior: "smooth", block: "center" });
+            sectionEl.scrollIntoView({ behavior: "smooth", block: "center" });
           }
         }
 
@@ -769,7 +772,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
       let nearestDistance = Number.POSITIVE_INFINITY;
 
       pages.forEach((_, index) => {
-        const el = pageRefs.current[index];
+        const el = sectionRefs.current[index] || pageRefs.current[index];
         if (!el) return;
         const rect = el.getBoundingClientRect();
         const distance = Math.abs(rect.top + rect.height / 2 - centerY);
@@ -1372,7 +1375,15 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           : "cursor-default";
 
     return (
-      <section key={pageData.id} data-page-index={pageIndex} className="mx-auto shrink-0 relative" style={{ width: "100%", maxWidth: "1200px" }}>
+      <section
+        key={pageData.id}
+        ref={(el) => {
+          sectionRefs.current[pageIndex] = el;
+        }}
+        data-page-index={pageIndex}
+        className="mx-auto shrink-0 relative"
+        style={{ width: "100%", maxWidth: "1200px" }}
+      >
         <div
           ref={(el) => {
             pageRefs.current[pageIndex] = el;
