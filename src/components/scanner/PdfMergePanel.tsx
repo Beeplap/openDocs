@@ -2,6 +2,7 @@
 
 import React from "react";
 import { usePasteFile } from "../../hooks/usePasteFile";
+import PageLayoutSelector from "./PageLayoutSelector";
 import { EditIcon, HandIcon, TrashIcon, UploadIcon } from "./icons";
 import type { MergeMode, ScanItem } from "./types";
 
@@ -232,42 +233,7 @@ export default function PdfMergePanel({
 
         {setMergeMode && (
           <div className="mt-4 border-t border-slate-200 pt-4">
-            <p className="text-sm font-semibold text-slate-950">Page Layout</p>
-            <div className="mt-2.5 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => setMergeMode("single")}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold text-left transition ${
-                  mergeMode === "single"
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                1 per page (Standard)
-              </button>
-              <button
-                type="button"
-                onClick={() => setMergeMode("firstTwoUp")}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold text-left transition ${
-                  mergeMode === "firstTwoUp"
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                First 2-up, then 1-up
-              </button>
-              <button
-                type="button"
-                onClick={() => setMergeMode("twoUp")}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold text-left transition ${
-                  mergeMode === "twoUp"
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                2 per Page (All)
-              </button>
-            </div>
+            <PageLayoutSelector value={mergeMode} onChange={setMergeMode} />
           </div>
         )}
 

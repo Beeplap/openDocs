@@ -1152,6 +1152,70 @@ async function renderEditedPdfPages(
     return pages;
   }
 
+  if (mergeMode === "fourUp") {
+    const height = Math.round(width / A4_RATIO);
+    for (let i = 0; i < items.length; i += 4) {
+      const canvas = createA4Canvas(width, height);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+
+      drawPageBackground(ctx, width, height);
+
+      const marginX = width * 0.05;
+      const marginY = height * 0.04;
+      const gapX = width * 0.03;
+      const gapY = height * 0.025;
+      const cellW = (width - marginX * 2 - gapX) / 2;
+      const cellH = (height - marginY * 2 - gapY) / 2;
+
+      for (let slot = 0; slot < 4; slot++) {
+        const item = items[i + slot];
+        if (!item) break;
+        const col = slot % 2;
+        const row = Math.floor(slot / 2);
+        const x = marginX + col * (cellW + gapX);
+        const y = marginY + row * (cellH + gapY);
+
+        await drawEditedItem(ctx, item, { x, y, w: cellW, h: cellH });
+      }
+
+      pages.push(await canvasToBlob(canvas));
+    }
+    return pages;
+  }
+
+  if (mergeMode === "sixUp") {
+    const height = Math.round(width / A4_RATIO);
+    for (let i = 0; i < items.length; i += 6) {
+      const canvas = createA4Canvas(width, height);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+
+      drawPageBackground(ctx, width, height);
+
+      const marginX = width * 0.04;
+      const marginY = height * 0.035;
+      const gapX = width * 0.025;
+      const gapY = height * 0.02;
+      const cellW = (width - marginX * 2 - gapX) / 2;
+      const cellH = (height - marginY * 2 - gapY * 2) / 3;
+
+      for (let slot = 0; slot < 6; slot++) {
+        const item = items[i + slot];
+        if (!item) break;
+        const col = slot % 2;
+        const row = Math.floor(slot / 2);
+        const x = marginX + col * (cellW + gapX);
+        const y = marginY + row * (cellH + gapY);
+
+        await drawEditedItem(ctx, item, { x, y, w: cellW, h: cellH });
+      }
+
+      pages.push(await canvasToBlob(canvas));
+    }
+    return pages;
+  }
+
   const height = Math.round(width / A4_RATIO);
   for (let i = 0; i < items.length; i += 2) {
     const canvas = createA4Canvas(width, height);

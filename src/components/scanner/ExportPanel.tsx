@@ -1,5 +1,4 @@
-"use client";
-
+import PageLayoutSelector from "./PageLayoutSelector";
 import { EditIcon } from "./icons";
 import type { MergeMode, ScanItem } from "./types";
 
@@ -37,49 +36,8 @@ export default function ExportPanel({
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">{pdfOrderItems.length} pages</div>
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-base font-semibold text-slate-950">Layout</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setMergeMode("single")}
-                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
-                  mergeMode === "single"
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                1 per page
-              </button>
-              <button
-                type="button"
-                onClick={() => setMergeMode("firstTwoUp")}
-                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
-                  mergeMode === "firstTwoUp"
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                First 2-up, then 1-up
-              </button>
-              <button
-                type="button"
-                onClick={() => setMergeMode("twoUp")}
-                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
-                  mergeMode === "twoUp"
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                2 per Page (All)
-              </button>
-            </div>
-          </div>
-
-          
-        </div>
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+        <PageLayoutSelector value={mergeMode} onChange={setMergeMode} />
 
         <button
           onClick={() => void exportPdf()}

@@ -52,7 +52,7 @@ export type ImageSize = { w: number; h: number };
 export type EditorFrame = { x: number; y: number; w: number; h: number };
 export type EditorBox = EditorFrame & { rotation: number };
 export type TransformHandle = "nw" | "ne" | "se" | "sw";
-export type MergeMode = "single" | "twoUp" | "firstTwoUp";
+export type MergeMode = "single" | "firstTwoUp" | "twoUp" | "fourUp" | "sixUp";
 export type CollageLayout = "grid" | "story" | "strip";
 
 export type SignatureStamp = {
