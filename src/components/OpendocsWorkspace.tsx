@@ -22,10 +22,10 @@ export type WorkspaceIntent =
   | "protect"
   | "flatten";
 
-const ImageConverter = dynamic(() => import("./ImageConverter"), { ssr: false });
-const PdfMergePanel = dynamic(() => import("./scanner/PdfMergePanel"), { ssr: false });
-const PdfEditorModal = dynamic(() => import("./scanner/PdfEditorModal"), { ssr: false });
-const AdvancedPdfEditor = dynamic(() => import("./scanner/AdvancedPdfEditor"), { ssr: false });
+import ImageConverter from "./ImageConverter";
+import PdfMergePanel from "./scanner/PdfMergePanel";
+import PdfEditorModal from "./scanner/PdfEditorModal";
+import AdvancedPdfEditor from "./scanner/AdvancedPdfEditor";
 
 function generateId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -927,13 +927,6 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
 
   return (
     <div className="min-h-screen px-4 py-4 text-foreground sm:px-6 lg:px-8">
-      {!isClient ? (
-        <div className="mx-auto max-w-7xl glass-panel p-8 text-sm text-muted">
-          Loading OpenDocs...
-        </div>
-      ) : null}
-      {isClient ? (
-        <>
       <input
         ref={fileInputRef}
         type="file"
@@ -1082,9 +1075,6 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
         handleTransformMove={handleTransformMove}
         endTransform={endTransform}
       />
-
-        </>
-      ) : null}
     </div>
   );
 }
