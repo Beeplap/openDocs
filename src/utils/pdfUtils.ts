@@ -5,7 +5,7 @@
 import { PDFDocument, rgb, degrees, StandardFonts, PDFFont } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import type { AdvancedAnnotation } from "../components/scanner/types";
+import type { AdvancedAnnotation, PageCrop } from "../components/scanner/types";
 
 const pdfWorkerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
 const CSS_PIXEL_TO_POINT = 0.75;
@@ -273,6 +273,7 @@ export type PageDataExport = {
   rotation: number;
   width: number;
   height: number;
+  crop?: PageCrop | null;
   canvas?: HTMLCanvasElement;
 };
 
@@ -377,6 +378,20 @@ export async function buildAnnotatedPdfFromSource(
       }
     } else {
       continue;
+    }
+
+    if (pgData.crop) {
+      const { top, right, bottom, left } = pgData.crop;
+      const originalWidth = outPage.getWidth();
+      const originalHeight = outPage.getHeight();
+
+      const cropX = originalWidth * left;
+      const cropY = originalHeight * bottom;
+      const cropW = Math.max(1, originalWidth * (1 - left - right));
+      const cropH = Math.max(1, originalHeight * (1 - top - bottom));
+
+      outPage.setCropBox(cropX, cropY, cropW, cropH);
+      outPage.setMediaBox(cropX, cropY, cropW, cropH);
     }
 
     const T = outPage.getRotation().angle % 360;

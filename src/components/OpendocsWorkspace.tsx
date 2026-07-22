@@ -11,6 +11,7 @@ import type { CropPoint, EditorBox, EditorFrame, ImageSize, MergeMode, PageEdit,
 
 type WorkspaceMode = "scan" | "pdf" | "convert" | "compress" | "advanced";
 export type WorkspaceIntent =
+  | "crop"
   | "add-text"
   | "add-signature"
   | "add-watermark"
@@ -21,7 +22,6 @@ export type WorkspaceIntent =
   | "protect"
   | "flatten";
 
-const CropModal = dynamic(() => import("./CropModal"), { ssr: false });
 const ImageConverter = dynamic(() => import("./ImageConverter"), { ssr: false });
 const PdfMergePanel = dynamic(() => import("./scanner/PdfMergePanel"), { ssr: false });
 const PdfEditorModal = dynamic(() => import("./scanner/PdfEditorModal"), { ssr: false });
@@ -48,6 +48,7 @@ function formatLimitBytes(bytes: number) {
 export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }: Props) {
   const [items, setItems] = useState<ScanItem[]>([]);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(initialMode);
+  const [activeEditorIntent, setActiveEditorIntent] = useState<WorkspaceIntent | undefined>(editorIntent);
   const [pdfFiles, setPdfFiles] = useState<PdfMergeItem[]>([]);
   const [pdfOrderIds, setPdfOrderIds] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -661,7 +662,8 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
       const url = URL.createObjectURL(pdfBlob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "merged-documents.pdf";
+      const firstBase = pdfFiles[0]?.name.replace(/\.pdf$/i, "") || "documents";
+      anchor.download = `${firstBase}_merged.pdf`;
       anchor.click();
       URL.revokeObjectURL(url);
       setStatusMessage("Merged PDF downloaded successfully.");
@@ -751,47 +753,10 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
     setMergePreviewUrls([]);
   }
 
-  function startCropForOne(itemId: string) {
-    setCropQueue([itemId]);
-    setCropCursor(0);
-    setCropOpen(true);
-    setStatusMessage("Editing selected image...");
-  }
-
-  function cancelCrop() {
-    setCropOpen(false);
-    setCropQueue([]);
-    setCropCursor(0);
-    setStatusMessage("Crop cancelled.");
-  }
-
-  async function handleCropApply(crop: NonNullable<PageEdit["documentCrop"]>) {
-    if (!cropTargetId) return;
-
-    const targetId = cropTargetId;
-    const queueLen = cropQueue.length;
-    const nextCursor = cropCursor + 1;
-
-    setItems((current) =>
-      current.map((item) => {
-        if (item.id !== targetId) return item;
-        return {
-          ...item,
-          edit: { ...item.edit, documentCrop: crop },
-        };
-      })
-    );
-    setMergePreviewUrls([]);
-
-    if (nextCursor >= queueLen) {
-      setCropOpen(false);
-      setCropQueue([]);
-      setCropCursor(0);
-      setStatusMessage("Cropping done.");
-    } else {
-      setCropCursor(nextCursor);
-      setStatusMessage(`Cropped ${nextCursor} of ${queueLen}.`);
-    }
+  function startCropForOne(_itemId?: string) {
+    setActiveEditorIntent("crop");
+    setWorkspaceMode("advanced");
+    setStatusMessage("Opening advanced 8-handle PDF cropper...");
   }
 
   function removeItem(id: string) {
@@ -946,7 +911,9 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
       const url = URL.createObjectURL(pdfBlob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = mergeMode === "twoUp" ? "opendocs-2up.pdf" : "opendocs-export.pdf";
+      const firstItemName = items[0]?.name.replace(/\.[^/.]+$/, "") || "document";
+      const actionSuffix = mergeMode === "twoUp" ? "_two_up" : "_exported";
+      anchor.download = `${firstItemName}${actionSuffix}.pdf`;
       anchor.click();
       URL.revokeObjectURL(url);
       setStatusMessage("PDF downloaded successfully.");
@@ -1083,21 +1050,14 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
               onReorderPdf={reorderPdfFile}
             />
           ) : workspaceMode === "advanced" ? (
-            <AdvancedPdfEditor onStatusMessage={setStatusMessage} statusMessage={statusMessage} initialIntent={editorIntent} />
+            <AdvancedPdfEditor onStatusMessage={setStatusMessage} statusMessage={statusMessage} initialIntent={activeEditorIntent ?? editorIntent} />
           ) : (
             <ImageConverter purpose={workspaceMode === "compress" ? "compress" : "convert"} />
           )}
         </main>
       </div>
 
-      <CropModal
-        open={cropOpen}
-        imageUrl={cropTarget?.previewUrl ?? null}
-        initialCrop={cropTarget?.edit.documentCrop ?? null}
-        title={cropTarget ? `Crop: ${cropTarget.name}` : "Crop selected image"}
-        onCancel={cancelCrop}
-        onApply={handleCropApply}
-      />
+
 
       <PdfEditorModal
         open={pdfEditorPageIndex !== null}

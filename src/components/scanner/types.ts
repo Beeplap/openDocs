@@ -6,18 +6,20 @@ export type DocumentCrop = {
   points: [CropPoint, CropPoint, CropPoint, CropPoint];
 };
 
+export type PageCrop = {
+  top: number;    // Inset fraction from top (0.0 to 1.0)
+  right: number;  // Inset fraction from right (0.0 to 1.0)
+  bottom: number; // Inset fraction from bottom (0.0 to 1.0)
+  left: number;   // Inset fraction from left (0.0 to 1.0)
+};
+
 export type PageEdit = {
   offsetX: number;
   offsetY: number;
   zoom: number;
   rotation: number;
   documentCrop: DocumentCrop | null;
-  crop: {
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
-  };
+  crop: PageCrop;
   filter: PageFilter;
 };
 

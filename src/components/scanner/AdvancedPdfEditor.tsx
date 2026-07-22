@@ -22,7 +22,8 @@ import SignaturePad from "./SignaturePad";
 import AdvancedToolbar from "./AdvancedToolbar";
 import type { DrawMode, DrawSettings, Tool } from "./AdvancedToolbar";
 import type { WorkspaceIntent } from "../OpendocsWorkspace";
-import type { AdvancedAnnotation } from "./types";
+import type { AdvancedAnnotation, PageCrop } from "./types";
+import PdfPageCropOverlay, { PdfCropControlBar } from "./PdfPageCropOverlay";
 import { loadPdfDocumentAndMetadata, buildAnnotatedPdf, buildAnnotatedPdfFromSource } from "../../utils/pdfUtils";
 import { takePendingFiles } from "../../utils/pendingFiles";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
@@ -34,6 +35,7 @@ type PageData = {
   width: number; 
   height: number; 
   rotation: number; 
+  crop?: PageCrop | null;
   originalPageIndex?: number; 
   dataUrl?: string; 
   pdfDoc?: PDFDocumentProxy; 
@@ -59,6 +61,7 @@ const DEFAULT_DRAW_SETTINGS: DrawSettings = {
 };
 
 function initialToolForIntent(intent?: WorkspaceIntent): Tool {
+  if (intent === "crop") return "crop";
   if (intent === "add-text") return "text";
   if (intent === "add-signature") return "signature";
   if (intent === "add-watermark") return "watermark";
@@ -182,6 +185,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
   const [eraserPreview, setEraserPreview] = useState<{ pageIndex: number; x: number; y: number } | null>(null);
   const [exportFilename, setExportFilename] = useState("document-edited.pdf");
   const [zoomScale, setZoomScale] = useState(1);
+  const [transientCrop, setTransientCrop] = useState<PageCrop>({ top: 0, right: 0, bottom: 0, left: 0 });
   const thumbnailContainerRef = useRef<HTMLDivElement>(null);
 
   
@@ -217,6 +221,42 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
     setAnnotations(newAnns);
     setPages(newPgs);
   }, []);
+
+  useEffect(() => {
+    if (activeTool === "crop" && pages[currentPage]) {
+      setTransientCrop(pages[currentPage].crop ?? { top: 0, right: 0, bottom: 0, left: 0 });
+    }
+  }, [activeTool, currentPage, pages]);
+
+  function handleApplyCrop() {
+    if (!pages[currentPage]) return;
+    const nextPages = pages.map((pg, i) =>
+      i === currentPage ? { ...pg, crop: transientCrop } : pg
+    );
+    pushState(annotations, nextPages);
+    setActiveTool("select");
+    onStatusMessage(`Crop applied to page ${currentPage + 1}.`);
+  }
+
+  function handleApplyToAllCrops() {
+    const nextPages = pages.map((pg) => ({ ...pg, crop: transientCrop }));
+    pushState(annotations, nextPages);
+    setActiveTool("select");
+    onStatusMessage("Crop applied to all pages.");
+  }
+
+  function handleResetCrop() {
+    setTransientCrop({ top: 0, right: 0, bottom: 0, left: 0 });
+    const nextPages = pages.map((pg, i) =>
+      i === currentPage ? { ...pg, crop: null } : pg
+    );
+    pushState(annotations, nextPages);
+    onStatusMessage(`Page ${currentPage + 1} crop reset.`);
+  }
+
+  function handleCancelCrop() {
+    setActiveTool("select");
+  }
 
   const undo = useCallback(() => {
     setHistory((prev) => {
@@ -311,6 +351,11 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
         else if (key === "y") { e.preventDefault(); redo(); }
         else if (key === "c" && selectedId) { e.preventDefault(); copyAnnotation(selectedId); }
         else if (key === "v" && copiedAnnotation) { e.preventDefault(); pasteAnnotation(); }
+      } else if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        setActiveTool("crop");
+        setSelectedId(null);
+        setEditingTextId(null);
       } else if (e.key.toLowerCase() === "p") {
         e.preventDefault();
         setActiveTool("pan");
@@ -422,7 +467,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
         setCurrentPdfFile(f);
         setOriginalPageIds(originalIds);
         if (!append) {
-          setExportFilename(f.name.replace(/\.pdf$/i, "") + "-edited.pdf");
+          setExportFilename(f.name.replace(/\.pdf$/i, "") + "_edited.pdf");
         }
 
         onStatusMessage(`${pagesData.length} page${pagesData.length > 1 ? "s" : ""} loaded.`);
@@ -1060,6 +1105,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
         rotation: pg.rotation,
         width: pg.width,
         height: pg.height,
+        crop: pg.crop,
         // Optional canvas fallback not strictly needed if we just render it here,
         // but for now we skip rendering canvas if it has originalPageIndex
       }));
@@ -1217,13 +1263,22 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           : await renderCurrentPdfBytes();
       const outputBytes = shouldProtect ? await encryptPDF(sourceBytes, protectPassword.trim()) : sourceBytes;
       
-      const finalName = filename || exportFilename || "document.pdf";
-      const nameWithExt = finalName.toLowerCase().endsWith(".pdf") ? finalName : `${finalName}.pdf`;
-      const outputName = shouldProtect
-        ? nameWithExt.replace(/\.pdf$/i, "-protected.pdf")
-        : shouldFlatten
-          ? nameWithExt.replace(/\.pdf$/i, "-flattened.pdf")
-          : nameWithExt;
+      const isCropped = pages.some(
+        (p) => p.crop && (p.crop.top > 0 || p.crop.right > 0 || p.crop.bottom > 0 || p.crop.left > 0)
+      );
+      const isAnnotated = annotations.length > 0;
+
+      let actionSuffix = "_edited";
+      if (shouldProtect) actionSuffix = "_protected";
+      else if (shouldFlatten) actionSuffix = "_flattened";
+      else if (isCropped && !isAnnotated) actionSuffix = "_cropped";
+      else if (isCropped && isAnnotated) actionSuffix = "_cropped_edited";
+
+      const rawName = filename || exportFilename || "document.pdf";
+      const cleanBase = rawName
+        .replace(/\.pdf$/i, "")
+        .replace(/[-_](edited|cropped|compressed|protected|flattened|unlocked)+$/gi, "");
+      const outputName = `${cleanBase}${actionSuffix}.pdf`;
           
       downloadPdfBytes(outputBytes, outputName);
       onStatusMessage(
@@ -1311,6 +1366,10 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
           style={{
             aspectRatio: `${pageWidth}/${pageHeight}`,
             touchAction: activeTool === "select" ? "pan-y" : "none",
+            clipPath:
+              pageData.crop && activeTool !== "crop" && (pageData.crop.top > 0 || pageData.crop.right > 0 || pageData.crop.bottom > 0 || pageData.crop.left > 0)
+                ? `inset(${pageData.crop.top * 100}% ${pageData.crop.right * 100}% ${pageData.crop.bottom * 100}% ${pageData.crop.left * 100}%)`
+                : undefined,
           }}
           onClick={(e) => handlePageClick(e, pageIndex)}
           onContextMenu={(e) => handlePageContextMenu(e, pageIndex)}
@@ -1539,6 +1598,15 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               </div>
             );
           })}
+
+          {activeTool === "crop" && isCurrentPage && (
+            <PdfPageCropOverlay
+              crop={transientCrop}
+              pageWidth={pageWidth}
+              pageHeight={pageHeight}
+              onChangeCrop={setTransientCrop}
+            />
+          )}
         </div>
       </section>
     );
@@ -1885,6 +1953,18 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
               selectedAnnotationId={selectedId}
               canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo}
             />
+
+            {activeTool === "crop" && pages[currentPage] && (
+              <PdfCropControlBar
+                pageWidth={pages[currentPage].width}
+                pageHeight={pages[currentPage].height}
+                onChangeCrop={setTransientCrop}
+                onApplyCrop={handleApplyCrop}
+                onApplyToAll={handleApplyToAllCrops}
+                onResetCrop={handleResetCrop}
+                onCancel={handleCancelCrop}
+              />
+            )}
 
             <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-200/60">
               {isLoading ? (
@@ -2275,17 +2355,17 @@ function PdfPageRenderer({ pageData, className, style }: { pageData: PageData; c
   const [rendered, setRendered] = useState(false);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || isVisible) return;
     const observer = new IntersectionObserver((entries) => {
       const intersecting = entries[0].isIntersecting;
-      setIsVisible(intersecting);
-      if (!intersecting) {
-        setRendered(false);
+      if (intersecting) {
+        setIsVisible(true);
+        observer.disconnect();
       }
     }, { rootMargin: "150% 0px" });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [isVisible]);
 
   useEffect(() => {
     if (!isVisible || rendered || !canvasRef.current) return;

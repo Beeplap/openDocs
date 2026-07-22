@@ -369,8 +369,10 @@ export default function ImageConverter({ purpose = "convert" }: { purpose?: Conv
         result.outputs.forEach((output, index) => {
           const extension = extensionFromMime(output.outputFormat);
           const isMultipleForThisFile = result.outputs.length > 1;
-          const outputName =
-            isMultipleForThisFile ? `${baseName}-page-${index + 1}.${extension}` : `${baseName}-opendocs.${extension}`;
+          const suffix = isCompression ? "_compressed" : "_converted";
+          const outputName = isMultipleForThisFile
+            ? `${baseName}_page_${index + 1}.${extension}`
+            : `${baseName}${suffix}.${extension}`;
           allNamedOutputs.push({ ...output, fileName: outputName });
         });
       }

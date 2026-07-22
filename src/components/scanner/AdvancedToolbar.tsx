@@ -3,7 +3,7 @@
 import type { ReactElement, ReactNode } from "react";
 import type { AdvancedAnnotation } from "./types";
 
-export type Tool = "pan" | "select" | "text" | "draw" | "signature" | "watermark";
+export type Tool = "pan" | "select" | "crop" | "text" | "draw" | "signature" | "watermark";
 export type DrawMode = "pen" | "highlighter" | "eraser";
 export type DrawSettings = {
   penColor: string;
@@ -59,6 +59,7 @@ const fontOptions = [
 const tools: { id: Tool; label: string; icon: (props: IconProps) => ReactElement }[] = [
   { id: "pan", label: "Pan (P)", icon: HandIcon },
   { id: "select", label: "Select (Esc)", icon: CursorIcon },
+  { id: "crop", label: "Crop Page (C)", icon: CropIcon },
   { id: "text", label: "Add text", icon: TextIcon },
   { id: "draw", label: "Draw", icon: PencilIcon },
   { id: "signature", label: "Signature", icon: SignatureIcon },
@@ -283,39 +284,9 @@ export default function AdvancedToolbar({
             type="button"
             onClick={onNewPdf}
             title="Start a new PDF"
-            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             New PDF
-          </button>
-          <button
-            type="button"
-            onClick={onUnlockPdf}
-            title="Remove password protection"
-            className="flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50"
-          >
-            Unlock
-          </button>
-          <button
-            type="button"
-            onClick={onProtectPdf}
-            disabled={!hasPages || isExporting}
-            title="Encrypt PDF on download"
-            className={`flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold disabled:text-slate-300 ${
-              protectEnabled ? "bg-rose-50 text-rose-700" : "text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            Protect
-          </button>
-          <button
-            type="button"
-            onClick={onFlattenPdf}
-            disabled={!hasPages || isExporting}
-            title="Make PDF uneditable"
-            className={`flex h-10 shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-200 px-3 text-sm font-semibold disabled:text-slate-300 ${
-              flattenEnabled ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            Flatten
           </button>
         </div>
       </div>
@@ -518,6 +489,15 @@ function TrashIcon(props: IconProps) {
       <path d="M14 11v6" />
       <path d="M6 7l1 14h10l1-14" />
       <path d="M9 7V4h6v3" />
+    </SvgRoot>
+  );
+}
+
+function CropIcon(props: IconProps) {
+  return (
+    <SvgRoot {...props}>
+      <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+      <path d="M18 22V8a2 2 0 0 0-2-2H2" />
     </SvgRoot>
   );
 }
