@@ -752,7 +752,7 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
 
         setTimeout(() => {
           isProgrammaticScrollRef.current = false;
-        }, 500);
+        }, 650);
       });
     }
   }
@@ -2004,7 +2004,9 @@ export default function AdvancedPdfEditor({ onStatusMessage, statusMessage, init
                   pinch={{ disabled: true }}
                   onTransform={(ref) => {
                     setZoomScale(ref.state.scale);
-                    syncCurrentPageFromScroll();
+                    if (!isProgrammaticScrollRef.current) {
+                      syncCurrentPageFromScroll();
+                    }
                   }}
                 >
                   {({ zoomIn, zoomOut, resetTransform, centerView, setTransform, instance }) => {
