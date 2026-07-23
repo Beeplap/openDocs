@@ -26,6 +26,9 @@ import ImageConverter from "./ImageConverter";
 import PdfMergePanel from "./scanner/PdfMergePanel";
 import PdfEditorModal from "./scanner/PdfEditorModal";
 import AdvancedPdfEditor from "./scanner/AdvancedPdfEditor";
+import CropModal from "./CropModal";
+import { cropImageWithDocumentCrop } from "../utils/documentCrop";
+import type { DocumentCrop } from "./scanner/types";
 
 function generateId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -753,11 +756,53 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
     setMergePreviewUrls([]);
   }
 
-  function startCropForOne(_itemId?: string) {
-    setActiveEditorIntent("crop");
-    setWorkspaceMode("advanced");
-    setStatusMessage("Opening advanced 8-handle PDF cropper...");
+  function startCropForOne(itemId?: string) {
+    const id = itemId ?? items[0]?.id;
+    if (!id) return;
+    setCropQueue([id]);
+    setCropCursor(0);
+    setCropOpen(true);
+    setStatusMessage("Adjust document crop corners.");
   }
+
+  const handleApplyCrop = useCallback(
+    async (newCrop: DocumentCrop) => {
+      if (!cropTarget) return;
+      try {
+        setStatusMessage("Applying crop...");
+        const origUrl = cropTarget.originalPreviewUrl || cropTarget.previewUrl;
+        const img = await loadImage(origUrl);
+        const croppedCanvas = await cropImageWithDocumentCrop(img, newCrop, 1800);
+        const blob = await new Promise<Blob>((resolve) =>
+          croppedCanvas.toBlob((b) => resolve(b!), "image/jpeg", 0.95)
+        );
+        const croppedUrl = URL.createObjectURL(blob);
+
+        setItems((current) =>
+          current.map((item) => {
+            if (item.id !== cropTarget.id) return item;
+            return {
+              ...item,
+              file: blob,
+              previewUrl: croppedUrl,
+              edit: {
+                ...item.edit,
+                documentCrop: newCrop,
+              },
+            };
+          })
+        );
+        setMergePreviewUrls([]);
+        setCropOpen(false);
+        setCropQueue([]);
+        setStatusMessage("Crop applied successfully.");
+      } catch (err) {
+        console.error("Failed to apply crop:", err);
+        setStatusMessage("Failed to apply crop.");
+      }
+    },
+    [cropTarget]
+  );
 
   function removeItem(id: string) {
     const target = itemsRef.current.find((item) => item.id === id) ?? null;
@@ -1067,6 +1112,18 @@ export default function OpendocsWorkspace({ initialMode = "scan", editorIntent }
         beginTransform={beginTransform}
         handleTransformMove={handleTransformMove}
         endTransform={endTransform}
+      />
+
+      <CropModal
+        open={cropOpen && cropTarget !== null}
+        imageUrl={cropTarget?.originalPreviewUrl || cropTarget?.previewUrl || null}
+        initialCrop={cropTarget?.edit.documentCrop ?? null}
+        title={cropTarget ? `Crop ${cropTarget.name}` : "Document crop"}
+        onCancel={() => {
+          setCropOpen(false);
+          setCropQueue([]);
+        }}
+        onApply={handleApplyCrop}
       />
     </div>
   );
